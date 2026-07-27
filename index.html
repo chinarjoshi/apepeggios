@@ -117,6 +117,8 @@
     justify-content: center;
   }
   .option-icon svg { width: 20px; height: 20px; display: block; }
+  .option-icon.icon-sun svg, .option-icon.icon-moon svg { width: 18px; height: 18px; }
+  .option-icon.icon-moon { padding-right: 0; padding-left: 0.45rem; }
   .option-icon.icon-clef {
     font-family: "Bravura Text", "Segoe UI Symbol", "Apple Symbols", serif;
     font-size: 2.4rem;
@@ -127,13 +129,14 @@
     background: transparent;
     color: var(--muted);
     border: 1px solid var(--dim);
-    padding: 0.25rem 0.7rem;
+    padding: 0.2rem 0.55rem;
     font-family: inherit;
-    font-size: 0.78rem;
+    font-size: 0.72rem;
     cursor: pointer;
     border-radius: 3px;
     font-variant-numeric: tabular-nums;
-    min-width: 2.3rem;
+    min-width: 2rem;
+    line-height: 1.2;
   }
   .duration-radio button:hover { color: var(--fg); border-color: var(--muted); }
   .duration-radio button.selected {
@@ -164,6 +167,7 @@
     align-items: center;
     justify-content: center;
     min-width: 2.5rem;
+    min-height: 1.9rem;
     padding: 0.35rem 0.55rem;
     border: 1px solid var(--dim);
     border-radius: 4px;
@@ -276,31 +280,13 @@
 <div id="mic-warn" class="mic-warn">mic muted</div>
 <script>
 // ===== Music theory =====
+const MAX_ACCIDENTALS = 7;   // key signatures beyond ±7 sharps/flats are unplayable
+const SEMITONES = 12;
+const pcMod = n => ((n % SEMITONES) + SEMITONES) % SEMITONES;   // wrap into pitch class 0..11
+
 const keySharpsMajor = {
   "C♭": -7, "G♭": -6, "D♭": -5, "A♭": -4, "E♭": -3, "B♭": -2, "F": -1,
   "C": 0, "G": 1, "D": 2, "A": 3, "E": 4, "B": 5, "F#": 6, "C#": 7,
-};
-const modeOffsets = {
-  "Major": 0, "Mixolydian": -1, "Dorian": -2, "Minor": -3, "Blues": -3,
-  "MelodicMinor": -3, "HarmonicMinor": -3,
-};
-const modeIntervals = {
-  "Major":         [0, 2, 4, 5, 7, 9, 11],
-  "Minor":         [0, 2, 3, 5, 7, 8, 10],
-  "Mixolydian":    [0, 2, 4, 5, 7, 9, 10],
-  "Dorian":        [0, 2, 3, 5, 7, 9, 10],
-  "Blues":         [0, 3, 5, 6, 7, 10],
-  "MelodicMinor":  [0, 2, 3, 5, 7, 9, 11],
-  "HarmonicMinor": [0, 2, 3, 5, 7, 8, 11],
-};
-const arpeggioIntervals = {
-  "Major":         [0, 4, 7, 11],
-  "Minor":         [0, 3, 7, 10],
-  "Mixolydian":    [0, 4, 7, 10],
-  "Dorian":        [0, 3, 7, 10],
-  "Blues":         [0, 3, 7, 10],  // in-scale arp (min7); blues scale lacks the natural 3rd
-  "MelodicMinor":  [0, 3, 7, 11],
-  "HarmonicMinor": [0, 3, 7, 11],
 };
 const rootPC = {
   "C": 0, "C#": 1, "D♭": 1, "D": 2, "E♭": 3, "E": 4, "F": 5,
@@ -308,38 +294,63 @@ const rootPC = {
 };
 const sharpNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const flatNames  = ["C", "D♭", "D", "E♭", "E", "F", "G♭", "G", "A♭", "A", "B♭", "B"];
-const STORAGE_KEY = "scales-history-v1";
-const WEIGHTS_KEY = "scales-weights-v1";
-const DURATION_KEY = "scales-duration-v1";
-const TRANSPOSITION_KEY = "scales-transposition-v1";
+
+// Every mode in one row: display, key-signature offset from major, scale + arp intervals.
+// Listed brightest → darkest; the mode-toggle row renders in this order.
+const MODES = [
+  // id               short  chord      off  scale                      arp
+  ["Lydian",         "lyd", "maj7#11",   1, [0,2,4,6,7,9,11], [0,4,7,11], false],
+  ["Major",          "maj", "maj7",      0, [0,2,4,5,7,9,11], [0,4,7,11], true ],
+  ["Mixolydian",     "mix", "7",        -1, [0,2,4,5,7,9,10], [0,4,7,10], true ],
+  ["MelodicMinor",   "mel", "minMaj7",  -3, [0,2,3,5,7,9,11], [0,3,7,11], false],
+  ["Dorian",         "dor", "min7",     -2, [0,2,3,5,7,9,10], [0,3,7,10], true ],
+  ["HarmonicMinor",  "har", "minMaj7",  -3, [0,2,3,5,7,8,11], [0,3,7,11], false],
+  ["Minor",          "min", "min7",     -3, [0,2,3,5,7,8,10], [0,3,7,10], true ],
+  // Blues has no natural 3rd, so its arp is the in-scale min7.
+  ["Blues",          "blu", "7",        -3, [0,3,5,6,7,10],   [0,3,7,10], true ],
+].map(([id, short, chord, offset, scale, arp, on]) => ({ id, short, chord, offset, scale, arp, on }));
+
+const MODE = Object.fromEntries(MODES.map(m => [m.id, m]));
+const defaultWeights = Object.fromEntries(MODES.map(m => [m.id, m.on ? 1 : 0]));
+
 const transpositions = {
   "C":  0,   // concert
   "B♭": -2,  // trumpet, tenor sax, clarinet
   "E♭": 3,   // alto sax, bari sax
   "F":  -7,  // french horn
 };
-const defaultTransposition = "B♭";
-function loadTransposition() { return localStorage.getItem(TRANSPOSITION_KEY) || defaultTransposition; }
-function saveTransposition(t) { localStorage.setItem(TRANSPOSITION_KEY, t); }
-const defaultWeights = {
-  "Major": 1, "Minor": 1, "Mixolydian": 1, "Dorian": 1, "Blues": 1,
-  "MelodicMinor": 0, "HarmonicMinor": 0,
-};
-const allModes = ["Major", "Minor", "Dorian", "Mixolydian", "Blues", "MelodicMinor", "HarmonicMinor"];
-const defaultDuration = "unlimited";
 const durationOptions = ["10", "20", "30", "unlimited"];  // minutes
-function loadDuration() { return localStorage.getItem(DURATION_KEY) || defaultDuration; }
-function saveDuration(d) { localStorage.setItem(DURATION_KEY, d); }
+const patternLabels = { scale: "straight", thirds: "3rds", fourths: "4ths", in3s: "in 3s", in4s: "in 4s" };
+const patternOptions = Object.keys(patternLabels);
 
-
-function loadWeights() {
-  try {
-    const raw = localStorage.getItem(WEIGHTS_KEY);
-    if (!raw) return { ...defaultWeights };
-    return { ...defaultWeights, ...JSON.parse(raw) };
-  } catch { return { ...defaultWeights }; }
+// ===== Persistence =====
+// store(key, fallback, revive?) → { load, save }. `revive` sanitizes parsed values,
+// returning undefined to fall back to the default.
+function store(key, fallback, revive) {
+  return {
+    load() {
+      const raw = localStorage.getItem(key);
+      if (raw === null) return structuredClone(fallback);
+      try {
+        const parsed = typeof fallback === "string" ? raw : JSON.parse(raw);
+        const value = revive ? revive(parsed) : parsed;
+        return value === undefined ? structuredClone(fallback) : value;
+      } catch { return structuredClone(fallback); }
+    },
+    save(value) {
+      localStorage.setItem(key, typeof value === "string" ? value : JSON.stringify(value));
+    },
+  };
 }
-function saveWeightsToStorage(w) { localStorage.setItem(WEIGHTS_KEY, JSON.stringify(w)); }
+
+const historyStore = store("scales-history-v1", [], v => Array.isArray(v) ? v : undefined);
+const weightsStore = store("scales-weights-v1", defaultWeights, v => ({ ...defaultWeights, ...v }));
+const durationStore = store("scales-duration-v1", "unlimited");
+const transpositionStore = store("scales-transposition-v1", "C");
+const patternsStore = store("scales-patterns-v2", ["scale"], v => {
+  const kept = Array.isArray(v) ? v.filter(p => patternOptions.includes(p)) : [];
+  return kept.length ? kept : undefined;
+});
 
 function activePools(w) {
   const pools = {};
@@ -347,8 +358,7 @@ function activePools(w) {
     if (wt <= 0) continue;
     pools[mode] = [];
     for (const [key, sig] of Object.entries(keySharpsMajor)) {
-      const s = sig + modeOffsets[mode];
-      if (s >= -7 && s <= 7) pools[mode].push(`${key} ${mode}`);
+      if (Math.abs(sig + MODE[mode].offset) <= MAX_ACCIDENTALS) pools[mode].push(`${key} ${mode}`);
     }
   }
   return pools;
@@ -384,17 +394,12 @@ function sampleScale(w) {
   return pools[last][Math.floor(Math.random() * pools[last].length)];
 }
 
-function estimatedScales(w, duration) {
-  if (duration === "unlimited") return buildUnlimitedList(w).length;
-  // Rough estimate based on user's average per-scale time (~30s) — for UI hint only.
-  return Math.round(parseInt(duration, 10) * 60 / 30);
-}
 function useFlats(scaleName) {
   const [key, mode] = scaleName.split(" ");
-  return keySharpsMajor[key] + modeOffsets[mode] < 0;
+  return keySharpsMajor[key] + MODE[mode].offset < 0;
 }
 function noteName(pc, flats) {
-  return (flats ? flatNames : sharpNames)[((pc % 12) + 12) % 12];
+  return (flats ? flatNames : sharpNames)[pcMod(pc)];
 }
 function letterOnly(name) { return name.replace(/[#♭]/g, ""); }
 
@@ -402,7 +407,7 @@ const letterPCs = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 const letters = ["C", "D", "E", "F", "G", "A", "B"];
 function spelledName(letter, targetPc) {
   const base = letterPCs[letter];
-  let diff = ((targetPc - base) % 12 + 12) % 12;
+  let diff = pcMod(targetPc - base);
   if (diff > 6) diff -= 12;
   if (diff === 0) return letter;
   if (diff === 1) return letter + "#";
@@ -413,144 +418,207 @@ function spelledName(letter, targetPc) {
 }
 function scaleSpelling(scaleName) {
   const [key, mode] = scaleName.split(" ");
-  const intervals = modeIntervals[mode];
+  const intervals = MODE[mode].scale;
   const root = rootPC[key];
   if (intervals.length !== 7) {
     // 6-note blues: fall back to flat/sharp preference
     const flats = useFlats(scaleName);
-    return intervals.map(iv => noteName((root + iv) % 12, flats));
+    return intervals.map(iv => noteName(pcMod(root + iv), flats));
   }
   const rootLetter = key[0];
   const rootIdx = letters.indexOf(rootLetter);
   return intervals.map((iv, i) => {
-    const targetPc = (root + iv) % 12;
+    const targetPc = pcMod(root + iv);
     const letter = letters[(rootIdx + i) % 7];
     return spelledName(letter, targetPc);
   });
 }
-const chordSuffix = {
-  "Major": "maj7", "Minor": "min7", "Mixolydian": "7", "Dorian": "min7", "Blues": "7",
-  "MelodicMinor": "minMaj7", "HarmonicMinor": "minMaj7",
-};
 function chordName(scaleName) {
   const [key, mode] = scaleName.split(" ");
-  return key + chordSuffix[mode];
+  return key + MODE[mode].chord;
 }
 function modeOf(scaleName) { return scaleName.split(" ")[1]; }
 function displayMode(mode) { return mode.replace(/([a-z])([A-Z])/g, "$1 $2"); }
-const modeShort = {
-  "Major": "maj", "Minor": "min", "Dorian": "dor", "Mixolydian": "mix",
-  "Blues": "blu", "MelodicMinor": "mel", "HarmonicMinor": "har",
-};
-function expectedSequence(scaleName, transposeSemi = 0) {
+// ===== Sequence: context, segments, patterns =====
+// A path = { pcs, slots, phases } (parallel arrays).
+// A pattern is a function of `ctx` returning { single, double?, branchIdx? }.
+
+function scaleContext(scaleName, transposeSemi = 0) {
   const [key, mode] = scaleName.split(" ");
   const root = rootPC[key];
-  const scale = modeIntervals[mode].map(i => (i + root) % 12);
-  const arp = arpeggioIntervals[mode].map(i => (i + root) % 12);
+  const scale = MODE[mode].scale.map(i => pcMod(i + root));
+  const arp = MODE[mode].arp.map(i => pcMod(i + root));
   const names = scaleSpelling(scaleName);
   const slotOfPc = {};
   scale.forEach((pc, i) => { slotOfPc[pc] = i; });
-  const octaveSlot = scale.length;
-  const displayPcs = [...scale, root];
-  const displayNames = [...names, names[0]];
   const writtenByPc = {};
   scale.forEach((pc, i) => { writtenByPc[pc] = names[i]; });
-
-  const toConcert = pc => ((pc + transposeSemi) % 12 + 12) % 12;
-
-  // Segments
-  const up1Pcs = [...scale, root];                                          // root..7, octave
-  const up1Slots = [...scale.map((_, i) => i), octaveSlot];
-  const down1Pcs = [...scale].reverse();                                    // 7..root
-  const down1Slots = scale.map((_, i) => scale.length - 1 - i);
-  const up2Pcs = [...scale.slice(1), root];                                 // 9th..15th (2..7 + top)
-  const up2Slots = [...scale.slice(1).map((_, i) => i + 1), octaveSlot];
-  const down2Pcs = [...scale].reverse();                                    // same pcs as down1
-  const down2Slots = scale.map((_, i) => scale.length - 1 - i);
-  // 1-octave arp: 3-5-7-5-3-1 (drop leading root & top)
-  const arpUp = arp.slice(1);
-  const arpDown = arp.slice(0, -1).reverse();
-  const arpFullPcs = [...arpUp, ...arpDown];
-  const arpFullSlots = arpFullPcs.map(pc => slotOfPc[pc]);
-
-  // 2-octave arp: 3-5-7-8-10-12-14-15-14-12-10-8-7-5-3-1 (16 notes; leading root dropped)
-  const chordUpPcs = [arp[1], arp[2], arp[3]];    // 3, 5, 7
-  const chordDownPcs = [arp[3], arp[2], arp[1]];  // 7, 5, 3
-  const arp2FullPcs = [
-    ...chordUpPcs, arp[0],   // 3 5 7 8
-    ...chordUpPcs, arp[0],   // 10 12 14 15
-    ...chordDownPcs, arp[0], // 14 12 10 8
-    ...chordDownPcs, arp[0], // 7 5 3 1
-  ];
-  const chordUpSlots = chordUpPcs.map(pc => slotOfPc[pc]);
-  const chordDownSlots = chordDownPcs.map(pc => slotOfPc[pc]);
-  const arp2FullSlots = [
-    ...chordUpSlots, octaveSlot,
-    ...chordUpSlots, octaveSlot,
-    ...chordDownSlots, octaveSlot,
-    ...chordDownSlots, 0,
-  ];
-
-  const up1Phase = up1Pcs.map(() => "up");
-  const down1Phase = down1Pcs.map(() => "down");
-  const up2Phase = up2Pcs.map(() => "up2");
-  const down2Phase = down2Pcs.map(() => "down");
-  const arpPhase = arpFullPcs.map(() => "arp");
-  const arp2Phase = arp2FullPcs.map(() => "arp");
-
-  const single = {
-    pcs: [...up1Pcs, ...down1Pcs, ...arpFullPcs].map(toConcert),
-    slots: [...up1Slots, ...down1Slots, ...arpFullSlots],
-    phases: [...up1Phase, ...down1Phase, ...arpPhase],
-    upEnd: up1Pcs.length,
-    downEnd: up1Pcs.length + down1Pcs.length,
-  };
-  const double = {
-    pcs: [...up1Pcs, ...up2Pcs, ...down2Pcs, ...down1Pcs, ...arp2FullPcs].map(toConcert),
-    slots: [...up1Slots, ...up2Slots, ...down2Slots, ...down1Slots, ...arp2FullSlots],
-    phases: [...up1Phase, ...up2Phase, ...down2Phase, ...down1Phase, ...arp2Phase],
-    upEnd: up1Pcs.length + up2Pcs.length,
-    downEnd: up1Pcs.length + up2Pcs.length + down2Pcs.length + down1Pcs.length,
-  };
-  // The top of the 1st octave is the start of the 2nd octave when we've committed to double.
-  double.phases[up1Pcs.length - 1] = "up2";
-
   return {
-    single, double,
-    branchIdx: up1Pcs.length,     // 8 for 7-note modes, 7 for blues
-    displayPcs, displayNames, writtenByPc,
+    scale, arp, root,
+    slotOfPc,
+    octaveSlot: scale.length,
+    toConcert: pc => pcMod(pc + transposeSemi),
+    displayPcs: [...scale, root],
+    displayNames: [...names, names[0]],
+    writtenByPc,
+  };
+}
+
+function segment(ctx, phase, entries) {
+  return {
+    pcs: entries.map(e => ctx.toConcert(e.pc)),
+    slots: entries.map(e => e.slot),
+    phases: entries.map(() => phase),
+  };
+}
+function compose(segments) {
+  return {
+    pcs: segments.flatMap(s => s.pcs),
+    slots: segments.flatMap(s => s.slots),
+    phases: segments.flatMap(s => s.phases),
+  };
+}
+
+// ----- Scale segments -----
+function scaleUpSeg(ctx, phase = "up") {
+  const e = ctx.scale.map((pc, d) => ({ pc, slot: d }));
+  e.push({ pc: ctx.scale[0], slot: ctx.octaveSlot });   // top octave
+  return segment(ctx, phase, e);
+}
+function scaleDownSeg(ctx, phase = "down") {
+  const e = [];
+  for (let d = ctx.scale.length - 1; d >= 0; d--) e.push({ pc: ctx.scale[d], slot: d });
+  return segment(ctx, phase, e);
+}
+function scaleUp2Seg(ctx) {
+  const e = ctx.scale.slice(1).map((pc, i) => ({ pc, slot: i + 1 }));
+  e.push({ pc: ctx.scale[0], slot: ctx.octaveSlot });   // 15th (top of 2nd)
+  return segment(ctx, "up2", e);
+}
+function scaleDown2Seg(ctx) {
+  const e = [];
+  for (let d = ctx.scale.length - 1; d >= 1; d--) e.push({ pc: ctx.scale[d], slot: d });
+  e.push({ pc: ctx.scale[0], slot: ctx.octaveSlot });   // octave point (halfway)
+  return segment(ctx, "down", e);
+}
+
+// ----- Arpeggio segments (chord tones from ctx.arp = [root, 3, 5, 7]) -----
+function arp1Seg(ctx) {
+  const s = pc => ctx.slotOfPc[pc];
+  const [r, t3, t5, t7] = ctx.arp;
+  return segment(ctx, "arp", [
+    { pc: t3, slot: s(t3) }, { pc: t5, slot: s(t5) }, { pc: t7, slot: s(t7) },
+    { pc: t5, slot: s(t5) }, { pc: t3, slot: s(t3) }, { pc: r,  slot: 0 },
+  ]);
+}
+function arp2Seg(ctx) {
+  const s = pc => ctx.slotOfPc[pc];
+  const [r, t3, t5, t7] = ctx.arp;
+  const up = [{ pc: t3, slot: s(t3) }, { pc: t5, slot: s(t5) }, { pc: t7, slot: s(t7) }];
+  const dn = [{ pc: t7, slot: s(t7) }, { pc: t5, slot: s(t5) }, { pc: t3, slot: s(t3) }];
+  const oct = { pc: r, slot: ctx.octaveSlot };
+  return segment(ctx, "arp", [...up, oct, ...up, oct, ...dn, oct, ...dn, { pc: r, slot: 0 }]);
+}
+
+// Slot for a scale degree that may cross the octave.
+function degSlot(ctx, deg) {
+  const n = ctx.scale.length;
+  if (deg === n) return ctx.octaveSlot;
+  return deg > n ? deg - n : deg;
+}
+
+// Intervallic segment: pairs (d, d+step) — thirds (step=2), fourths (step=3), fifths (step=4).
+function intervalSeg(ctx, step, phase = "up", direction = "up") {
+  const n = ctx.scale.length;
+  const e = [];
+  for (let d = 0; d < n; d++) {
+    e.push({ pc: ctx.scale[d], slot: d });
+    e.push({ pc: ctx.scale[(d + step) % n], slot: degSlot(ctx, d + step) });
+  }
+  e.push({ pc: ctx.scale[0], slot: ctx.octaveSlot });
+  if (direction === "down") e.reverse();
+  return segment(ctx, phase, e);
+}
+
+// Grouped segment: consecutive groups of `size` (1-2-3, 2-3-4, ...) — "in 3s", "in 4s".
+function groupSeg(ctx, size, phase = "up", direction = "up") {
+  const n = ctx.scale.length;
+  const e = [];
+  for (let d = 0; d < n; d++) {
+    for (let k = 0; k < size; k++) {
+      const deg = d + k;
+      e.push({ pc: ctx.scale[deg % n], slot: degSlot(ctx, deg) });
+    }
+  }
+  e.push({ pc: ctx.scale[0], slot: ctx.octaveSlot });
+  if (direction === "down") e.reverse();
+  return segment(ctx, phase, e);
+}
+
+// ----- Patterns -----
+const patterns = {
+  scale: {
+    single: ctx => compose([scaleUpSeg(ctx), scaleDownSeg(ctx), arp1Seg(ctx)]),
+    double: ctx => {
+      const p = compose([scaleUpSeg(ctx), scaleUp2Seg(ctx), scaleDown2Seg(ctx), scaleDownSeg(ctx), arp2Seg(ctx)]);
+      p.phases[ctx.scale.length] = "up2";   // octave = start of 2nd octave (turquoise)
+      return p;
+    },
+    branchIdx: ctx => ctx.scale.length + 1,
+  },
+  thirds:  { single: ctx => compose([intervalSeg(ctx, 2, "up"), intervalSeg(ctx, 2, "down", "down")]) },
+  fourths: { single: ctx => compose([intervalSeg(ctx, 3, "up"), intervalSeg(ctx, 3, "down", "down")]) },
+  in3s:    { single: ctx => compose([groupSeg(ctx, 3, "up"),    groupSeg(ctx, 3, "down", "down")]) },
+  in4s:    { single: ctx => compose([groupSeg(ctx, 4, "up"),    groupSeg(ctx, 4, "down", "down")]) },
+};
+
+function buildExpected(scaleName, transposeSemi = 0, patternKey = "scale") {
+  const ctx = scaleContext(scaleName, transposeSemi);
+  const pat = patterns[patternKey] || patterns.scale;
+  const single = pat.single(ctx);
+  const double = pat.double ? pat.double(ctx) : null;
+  const branchIdx = double && pat.branchIdx ? pat.branchIdx(ctx) : null;
+  return {
+    single, double, branchIdx,
+    displayPcs: ctx.displayPcs,
+    displayNames: ctx.displayNames,
+    writtenByPc: ctx.writtenByPc,
     bars: new Set(),
   };
 }
 
 function getPhaseAt(i, matchIdx, path) {
   const p = path.phases[i];
-  // Peak of an "up" phase becomes "down" once the note AFTER it has also been played
-  // (i.e., we've confirmed the turnaround). Delay by one match so the branch point
-  // can commit to double-octave (turquoise) instead of prematurely flashing green.
-  if ((p === "up" || p === "up2") && matchIdx > i + 1 && path.phases[i + 1] === "down") {
-    return "down";
-  }
+  // Peak of an "up" phase becomes "down" once the note AFTER it has been played (turnaround confirmed).
+  if ((p === "up" || p === "up2") && matchIdx > i + 1 && path.phases[i + 1] === "down") return "down";
   return p;
 }
 
 // ===== Pitch detection (autocorrelation) =====
+const PITCH = {
+  minFreq: 130, maxFreq: 1400,   // ~trumpet range
+  minRms: 0.005,                 // below this the buffer is treated as silence
+  trimThreshold: 0.2,            // edge-trim amplitude for the correlation window
+  minWindow: 64,                 // samples needed for a usable correlation
+  a4: 440, a4Midi: 69,
+};
+
 function autoCorrelate(buf, sampleRate) {
   const SIZE = buf.length;
   let sumSq = 0;
   for (let i = 0; i < SIZE; i++) sumSq += buf[i] * buf[i];
   const rms = Math.sqrt(sumSq / SIZE);
-  if (rms < 0.005) return { freq: -1, rms };
+  if (rms < PITCH.minRms) return { freq: -1, rms };
 
   let r1 = 0, r2 = SIZE - 1;
-  const thres = 0.2;
+  const thres = PITCH.trimThreshold;
   for (let i = 0; i < SIZE / 2; i++)
     if (Math.abs(buf[i]) < thres) { r1 = i; break; }
   for (let i = 1; i < SIZE / 2; i++)
     if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; }
   const trimmed = buf.slice(r1, r2);
   const N = trimmed.length;
-  if (N < 64) return { freq: -1, rms };
+  if (N < PITCH.minWindow) return { freq: -1, rms };
 
   const c = new Float32Array(N);
   for (let i = 0; i < N; i++) {
@@ -570,28 +638,37 @@ function autoCorrelate(buf, sampleRate) {
   const b = (x3 - x1) / 2;
   const T0 = maxi - (a ? b / (2 * a) : 0);
   const freq = sampleRate / T0;
-  if (freq < 130 || freq > 1400) return { freq: -1, rms };  // ~trumpet range
+  if (freq < PITCH.minFreq || freq > PITCH.maxFreq) return { freq: -1, rms };
   return { freq, rms };
 }
 
+function freqToMidi(freq) {
+  return PITCH.a4Midi + SEMITONES * Math.log2(freq / PITCH.a4);
+}
 function freqToPC(freq) {
-  const midi = Math.round(69 + 12 * Math.log2(freq / 440));
-  return ((midi % 12) + 12) % 12;
+  const midi = Math.round(freqToMidi(freq));
+  return pcMod(midi);
 }
 function freqToCents(freq) {
-  const midi = 69 + 12 * Math.log2(freq / 440);
+  const midi = freqToMidi(freq);
   return (midi - Math.round(midi)) * 100;  // in [-50, 50)
 }
 
 // ===== Note tracker: emits a note event on each stable pitch onset =====
+const TRACKER = {
+  stability: 2,     // consecutive frames on the same pitch before it counts as a note
+  rmsOn: 0.012,     // loudness to register an attack
+  rmsOff: 0.004,    // loudness below which the note is released
+};
+
 class NoteTracker {
   constructor(onNote, onSilence) {
     this.onNote = onNote;
     this.onSilence = onSilence || (() => {});
     this.reset();
-    this.STABILITY = 2;
-    this.RMS_ON = 0.012;
-    this.RMS_OFF = 0.004;
+    this.STABILITY = TRACKER.stability;
+    this.RMS_ON = TRACKER.rmsOn;
+    this.RMS_OFF = TRACKER.rmsOff;
   }
   reset() {
     this.state = "silent";
@@ -647,7 +724,7 @@ class Matcher {
     return this.expected[this.path || "single"];
   }
   input(pc, time, cents = 0) {
-    cancelRewind();
+    pendingRewind.cancel();
     // At the branch point, choose single or double based on what the player hits.
     if (this.path === null && this.matchIdx === this.expected.branchIdx) {
       if (pc === this.expected.single.pcs[this.matchIdx]) this.path = "single";
@@ -667,7 +744,7 @@ class Matcher {
     // Backward search on the committed (or default single) path.
     for (let k = this.matchIdx - 1; k >= 0; k--) {
       if (path.pcs[k] === pc) {
-        scheduleRewind(pc, k + 1, time, cents);
+        pendingRewind.arm({ pc, rewindTo: k + 1, time, cents });
         return;
       }
     }
@@ -694,13 +771,17 @@ const TIMING_CV_MAX = 1.2;  // lenient (higher = more forgiving)
 let audioCtx = null, analyser = null, mediaStream = null, audioBuf = null;
 let noteTracker = null;
 let smoothedCents = 0;
-let pendingStartTimer = null;
-let pendingStartPc = null;
-const START_HOLD_MS = 500;
-let pendingRewindTimer = null;
-let pendingRewindPc = null;
-let pendingRewindTo = null;
-const REWIND_HOLD_MS = 500;
+const HOLD_MS = 500;
+function holdTimer(ms, onFire) {
+  let timer = null;
+  return {
+    arm(data) { this.cancel(); timer = setTimeout(() => { timer = null; onFire(data); }, ms); },
+    cancel() { if (timer !== null) { clearTimeout(timer); timer = null; } },
+    get active() { return timer !== null; },
+  };
+}
+// Populated once state/matcher globals are defined below.
+let pendingStart, pendingRewind;
 
 async function initMic(silent = false) {
   try {
@@ -745,54 +826,50 @@ function detectLoop() {
   const { freq, rms } = autoCorrelate(audioBuf, audioCtx.sampleRate);
   const active = state === "playing" || state === "ready";
   if (noteTracker && active) noteTracker.process(rms, freq, performance.now());
-  const heardEl = document.getElementById("heard");
-  if (heardEl && active && scales[index]) {
-    const flats = useFlats(scales[index]);
-    const textEl = heardEl.querySelector(".heard-text");
-    const arcEl = heardEl.querySelector(".tuning-arc");
-    // Only display once noteTracker has confirmed a stable pitch (filters noise transients).
-    const stable = noteTracker && noteTracker.state === "playing" && noteTracker.currentPC >= 0;
-    if (stable && freq > 0 && textEl) {
-      const concertPc = freqToPC(freq);
-      const t = transpositions[transposition] || 0;
-      const writtenPc = ((concertPc - t) % 12 + 12) % 12;
-      const map = currentExpected?.writtenByPc || {};
-      textEl.textContent = map[writtenPc] || noteName(writtenPc, flats);
-      const cents = freqToCents(freq);
-      smoothedCents = smoothedCents * 0.72 + cents * 0.28;
-      const color = centsToColor(smoothedCents);
-      textEl.style.fill = color;
-      if (arcEl) {
-        arcEl.setAttribute("d", tuningArcPath(smoothedCents));
-        arcEl.style.stroke = color;
-      }
-    } else if (textEl) {
-      textEl.textContent = "—";
-      textEl.style.fill = "";
-      smoothedCents = 0;
-      if (arcEl) { arcEl.setAttribute("d", "M 12 70 Q 60 70 108 70"); arcEl.style.stroke = ""; }
-    }
-  }
+  if (active) renderTuner(freq);
   requestAnimationFrame(detectLoop);
+}
+
+function renderTuner(freq) {
+  const heardEl = document.getElementById("heard");
+  if (!heardEl || !scales[index]) return;
+  const textEl = heardEl.querySelector(".heard-text");
+  const arcEl = heardEl.querySelector(".tuning-arc");
+  const stable = noteTracker?.state === "playing" && noteTracker.currentPC >= 0;
+  if (!(stable && freq > 0)) {
+    if (textEl) { textEl.textContent = "—"; textEl.style.fill = ""; }
+    smoothedCents = 0;
+    if (arcEl) { arcEl.setAttribute("d", FLAT_ARC); arcEl.style.stroke = ""; }
+    return;
+  }
+  const t = transpositions[transposition] || 0;
+  const writtenPc = pcMod(freqToPC(freq) - t);
+  const nameMap = currentExpected?.writtenByPc || {};
+  textEl.textContent = nameMap[writtenPc] || noteName(writtenPc, useFlats(scales[index]));
+  smoothedCents += (freqToCents(freq) - smoothedCents) * TUNER.smoothing;
+  const color = centsToColor(smoothedCents);
+  textEl.style.fill = color;
+  if (arcEl) {
+    arcEl.setAttribute("d", tuningArcPath(smoothedCents));
+    arcEl.style.stroke = color;
+  }
 }
 
 // ===== App state =====
 const app = document.getElementById("app");
 let scales, times, state, startTime, scaleStart, index;
 let currentExpected = null, currentMatcher = null;
-let weights = loadWeights();
-let duration = loadDuration();
-let transposition = loadTransposition();
+let weights = weightsStore.load();
+let duration = durationStore.load();
+let transposition = transpositionStore.load();
+let activePatterns = patternsStore.load();
+let currentPattern = activePatterns[0];
 let targetMs = null;  // null = unlimited
-
-function shuffle(a) {
-  const r = a.slice();
-  for (let i = r.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [r[i], r[j]] = [r[j], r[i]];
-  }
-  return r;
+function pickPattern() {
+  const pool = activePatterns.length ? activePatterns : patternOptions.slice(0, 1);
+  return pool[Math.floor(Math.random() * pool.length)];
 }
+
 function fmt(ms) {
   const s = ms / 1000;
   if (s < 60) return s.toFixed(2) + "s";
@@ -800,20 +877,12 @@ function fmt(ms) {
   const rem = (s % 60).toFixed(1).padStart(4, "0");
   return `${m}m ${rem}s`;
 }
-function loadHistory() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const d = JSON.parse(raw);
-    return Array.isArray(d) ? d : [];
-  } catch { return []; }
-}
-function saveHistory(h) { localStorage.setItem(STORAGE_KEY, JSON.stringify(h)); }
 
 function resetSession() {
   times = [];
   index = 0;
   startTime = null;
+  currentPattern = pickPattern();
   if (duration === "unlimited") {
     scales = buildUnlimitedList(weights);
     targetMs = null;
@@ -839,22 +908,22 @@ function render() {
 
 function playAreaHTML(scaleName) {
   if (!scaleName) return `<div class="subtitle">no modes on</div>`;
-  const exp = expectedSequence(scaleName, transpositions[transposition] || 0);
+  const exp = buildExpected(scaleName, transpositions[transposition] || 0, currentPattern);
   currentExpected = exp;
   const seqHTML = exp.displayNames.map((name, i) =>
-    `<span class="note" data-slot="${i}" data-full="${name}">${letterOnly(name)}</span>`
+    `<span class="note" data-slot="${i}" data-full="${name}"></span>`
   ).join("");
   const heardHTML = audioCtx ? `
     <div class="heard" id="heard">
-      <svg viewBox="0 0 120 140" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox="0 0 ${TUNER.width} ${TUNER.height}" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <mask id="letter-mask">
-            <rect fill="white" width="120" height="140"/>
-            <circle fill="black" cx="60" cy="70" r="22"/>
+            <rect fill="white" width="${TUNER.width}" height="${TUNER.height}"/>
+            <circle fill="black" cx="${TUNER.cx}" cy="${TUNER.baselineY}" r="${TUNER.maskRadius}"/>
           </mask>
         </defs>
-        <path class="tuning-arc" d="M 12 70 Q 60 70 108 70" mask="url(#letter-mask)"/>
-        <text class="heard-text" x="60" y="78" text-anchor="middle">—</text>
+        <path class="tuning-arc" d="${FLAT_ARC}" mask="url(#letter-mask)"/>
+        <text class="heard-text" x="${TUNER.cx}" y="${TUNER.baselineY + 8}" text-anchor="middle">—</text>
       </svg>
     </div>
   ` : "";
@@ -862,6 +931,7 @@ function playAreaHTML(scaleName) {
     <div class="scale-title">
       <div class="scale">${chordName(scaleName)}</div>
       <div class="mode-label">${displayMode(modeOf(scaleName))}</div>
+      <div class="mode-label">${patternLabels[currentPattern]}</div>
     </div>
     <div class="sequence" id="sequence">${seqHTML}</div>
     ${heardHTML}
@@ -869,7 +939,7 @@ function playAreaHTML(scaleName) {
 }
 
 function renderReady() {
-  const h = loadHistory();
+  const h = historyStore.load();
   const scaleName = scales[index];
   let meta = "";
   if (h.length > 0) {
@@ -885,8 +955,10 @@ function renderReady() {
     `<button class="${d === duration ? "selected" : ""}" data-dur="${d}">${d === "unlimited" ? "∞" : d}</button>`).join("");
   const transposeButtons = Object.keys(transpositions).map(t =>
     `<button class="${t === transposition ? "selected" : ""}" data-trans="${t}">${t}</button>`).join("");
-  const modeButtons = allModes.map(m =>
-    `<button class="${weights[m] > 0 ? "selected" : ""}" data-mode-toggle="${m}">${modeShort[m]}</button>`).join("");
+  const patternButtons = patternOptions.map(p =>
+    `<button class="${activePatterns.includes(p) ? "selected" : ""}" data-pattern="${p}">${patternLabels[p]}</button>`).join("");
+  const modeButtons = MODES.map(m =>
+    `<button class="${weights[m.id] > 0 ? "selected" : ""}" data-mode-toggle="${m.id}">${m.short}</button>`).join("");
 
   app.innerHTML = `
     <div class="stage">
@@ -899,7 +971,18 @@ function renderReady() {
       </div>
       <div class="play-area">${playAreaHTML(scaleName)}</div>
       <div class="widgets widgets-bottom">
-        <div class="duration-radio mode-toggles" id="mode-toggles">${modeButtons}</div>
+        <div class="duration-radio mode-toggles" id="mode-toggles">
+          <span class="option-icon icon-sun" aria-hidden="true" title="brightest">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></svg>
+          </span>
+          ${modeButtons}
+          <span class="option-icon icon-moon" aria-hidden="true" title="darkest">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 15.5A8 8 0 0 1 9 5a7 7 0 1 0 11 10.5z"/></svg>
+          </span>
+        </div>
+        <div class="duration-radio" id="pattern-radio"><span class="option-icon" aria-hidden="true">
+          <svg viewBox="0 0 20 20" fill="currentColor"><ellipse cx="5" cy="15" rx="2.5" ry="1.8"/><ellipse cx="14" cy="13" rx="2.5" ry="1.8"/><rect x="7" y="4" width="1.2" height="11"/><rect x="16" y="2" width="1.2" height="11"/><path d="M8 4.5 L17 2.5" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
+        </span>${patternButtons}</div>
         ${!audioCtx ? `<button class="btn-mic-inline" id="btn-enable-mic">enable microphone for auto-advance</button>` : ""}
       </div>
     </div>
@@ -918,7 +1001,7 @@ function attachReadyHandlers() {
   document.querySelectorAll("#duration-radio button").forEach(btn => {
     btn.addEventListener("click", (e) => {
       duration = e.currentTarget.dataset.dur;
-      saveDuration(duration);
+      durationStore.save(duration);
       document.querySelectorAll("#duration-radio button").forEach(b => b.classList.toggle("selected", b === e.currentTarget));
       resetSession();
       refreshPlayArea();
@@ -927,8 +1010,24 @@ function attachReadyHandlers() {
   document.querySelectorAll("#transpose-radio button").forEach(btn => {
     btn.addEventListener("click", (e) => {
       transposition = e.currentTarget.dataset.trans;
-      saveTransposition(transposition);
+      transpositionStore.save(transposition);
       document.querySelectorAll("#transpose-radio button").forEach(b => b.classList.toggle("selected", b === e.currentTarget));
+      refreshPlayArea();
+    });
+  });
+  document.querySelectorAll("#pattern-radio button").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      const p = e.currentTarget.dataset.pattern;
+      const idx = activePatterns.indexOf(p);
+      if (idx >= 0) {
+        if (activePatterns.length === 1) return;  // keep at least one selected
+        activePatterns.splice(idx, 1);
+      } else {
+        activePatterns.push(p);
+      }
+      patternsStore.save(activePatterns);
+      e.currentTarget.classList.toggle("selected", activePatterns.includes(p));
+      currentPattern = pickPattern();
       refreshPlayArea();
     });
   });
@@ -936,7 +1035,7 @@ function attachReadyHandlers() {
     btn.addEventListener("click", (e) => {
       const mode = e.currentTarget.dataset.modeToggle;
       weights[mode] = weights[mode] > 0 ? 0 : 1;
-      saveWeightsToStorage(weights);
+      weightsStore.save(weights);
       e.currentTarget.classList.toggle("selected", weights[mode] > 0);
       resetSession();
       refreshPlayArea();
@@ -963,39 +1062,16 @@ function refreshPlayArea() {
 function setupMatcher() {
   if (!audioCtx || !noteTracker || !currentExpected) { currentMatcher = null; return; }
   noteTracker.reset();
-  cancelStart();
+  pendingStart.cancel();
   currentMatcher = new Matcher(
     currentExpected,
     (idx) => {
       updateSequenceUI(idx);
-      if (state === "ready" && idx === 1) scheduleStart(currentExpected.single.pcs[0]);
+      if (state === "ready" && idx === 1) pendingStart.arm(currentExpected.single.pcs[0]);
     },
     (t, cv) => onSequenceComplete(cv),
-    () => { cancelStart(); flashWrong(); },
+    () => { pendingStart.cancel(); resetProgress(); flashWrong(); },
   );
-}
-
-function scheduleStart(pc) {
-  cancelStart();
-  pendingStartPc = pc;
-  pendingStartTimer = setTimeout(() => {
-    pendingStartTimer = null;
-    if (noteTracker && noteTracker.state === "playing" && noteTracker.currentPC === pendingStartPc) {
-      beginPlaying();
-    } else {
-      resetProgress();
-    }
-    pendingStartPc = null;
-  }, START_HOLD_MS);
-}
-
-function cancelStart() {
-  if (pendingStartTimer !== null) {
-    clearTimeout(pendingStartTimer);
-    pendingStartTimer = null;
-    pendingStartPc = null;
-    resetProgress();
-  }
 }
 
 function resetProgress() {
@@ -1007,34 +1083,22 @@ function resetProgress() {
   updateSequenceUI(0);
 }
 
-function scheduleRewind(pc, rewindTo, time, cents) {
-  cancelRewind();
-  pendingRewindPc = pc;
-  pendingRewindTo = rewindTo;
-  pendingRewindTimer = setTimeout(() => {
-    pendingRewindTimer = null;
-    if (currentMatcher && noteTracker && noteTracker.state === "playing"
-        && noteTracker.currentPC === pendingRewindPc) {
-      currentMatcher.times.length = pendingRewindTo;
-      currentMatcher.cents.length = pendingRewindTo;
-      currentMatcher.times[pendingRewindTo - 1] = time;
-      currentMatcher.cents[pendingRewindTo - 1] = cents;
-      currentMatcher.matchIdx = pendingRewindTo;
-      updateSequenceUI(pendingRewindTo);
-    }
-    pendingRewindPc = null;
-    pendingRewindTo = null;
-  }, REWIND_HOLD_MS);
-}
-
-function cancelRewind() {
-  if (pendingRewindTimer !== null) {
-    clearTimeout(pendingRewindTimer);
-    pendingRewindTimer = null;
-    pendingRewindPc = null;
-    pendingRewindTo = null;
+// Set up hold timers (defined here so they close over resetProgress/updateSequenceUI/beginPlaying).
+pendingStart = holdTimer(HOLD_MS, (pc) => {
+  if (noteTracker?.state === "playing" && noteTracker.currentPC === pc) beginPlaying();
+  else resetProgress();
+});
+pendingRewind = holdTimer(HOLD_MS, ({ pc, rewindTo, time, cents }) => {
+  if (!currentMatcher) return;
+  if (noteTracker?.state === "playing" && noteTracker.currentPC === pc) {
+    currentMatcher.times.length = rewindTo;
+    currentMatcher.cents.length = rewindTo;
+    currentMatcher.times[rewindTo - 1] = time;
+    currentMatcher.cents[rewindTo - 1] = cents;
+    currentMatcher.matchIdx = rewindTo;
+    updateSequenceUI(rewindTo);
   }
-}
+});
 
 function beginPlaying() {
   if (state !== "ready" || !scales[index]) return;
@@ -1077,21 +1141,29 @@ function renderPlaying() {
   tickTimer();
 }
 
+// Tuner: fixed 120x140 viewBox; the letter sits in a masked circle at (cx, baselineY).
+const TUNER = {
+  width: 120, height: 140,
+  cx: 60, baselineY: 70, maskRadius: 22, arcLeft: 12, arcRight: 108,
+  maxCents: 40,          // arc saturates here
+  bendPerCent: 2.0,      // control-point rise per cent sharp
+  smoothing: 0.28,       // EMA weight on each new reading
+  redAtCents: 30,        // |cents| where the color reaches full red
+  inTune: [141, 216, 141],
+  outOfTune: [255, 107, 107],
+};
+const FLAT_ARC = `M ${TUNER.arcLeft} ${TUNER.baselineY} Q ${TUNER.cx} ${TUNER.baselineY} ${TUNER.arcRight} ${TUNER.baselineY}`;
+
 function tuningArcPath(cents) {
-  // Single horizontal arc from x=12 to x=108, bending around the letter (masked at r=22).
   // Sharp → bends upward (control point above baseline). Flat → bends downward.
-  const c = Math.max(-40, Math.min(40, cents));
-  const controlY = 70 - c * 2.0;  // c=±40 → control at 70∓80
-  return `M 12 70 Q 60 ${controlY.toFixed(1)} 108 70`;
+  const c = Math.max(-TUNER.maxCents, Math.min(TUNER.maxCents, cents));
+  const controlY = TUNER.baselineY - c * TUNER.bendPerCent;
+  return `M ${TUNER.arcLeft} ${TUNER.baselineY} Q ${TUNER.cx} ${controlY.toFixed(1)} ${TUNER.arcRight} ${TUNER.baselineY}`;
 }
 function centsToColor(cents) {
-  // Green (in-tune) → red (out-of-tune), interpolating through yellow.
-  const abs = Math.min(Math.abs(cents), 30);
-  const t = abs / 30;
-  const r = Math.round(141 + (255 - 141) * t);
-  const g = Math.round(216 + (107 - 216) * t);
-  const b = Math.round(141 + (107 - 141) * t);
-  return `rgb(${r},${g},${b})`;
+  const t = Math.min(Math.abs(cents), TUNER.redAtCents) / TUNER.redAtCents;
+  const rgb = TUNER.inTune.map((from, i) => Math.round(from + (TUNER.outOfTune[i] - from) * t));
+  return `rgb(${rgb.join(",")})`;
 }
 
 function updateSequenceUI(matchIdx) {
@@ -1143,9 +1215,10 @@ function completeCurrent() {
   const now = performance.now();
   const cList = currentMatcher?.cents || [];
   const avgCents = cList.length ? cList.reduce((s, c) => s + Math.abs(c), 0) / cList.length : null;
-  times.push({ scale: scales[index], ms: now - scaleStart, cents: avgCents });
+  times.push({ scale: scales[index], ms: now - scaleStart, pattern: currentPattern, cents: avgCents });
   scaleStart = now;
   index++;
+  currentPattern = pickPattern();
   const elapsed = now - startTime;
   const timeUp = targetMs !== null && elapsed >= targetMs;
   const listDone = targetMs === null && index >= scales.length;
@@ -1187,9 +1260,9 @@ function recordSession() {
       cents: typeof t.cents === "number" ? Math.round(t.cents * 10) / 10 : null,
     })),
   };
-  const h = loadHistory();
+  const h = historyStore.load();
   h.push(session);
-  saveHistory(h);
+  historyStore.save(h);
 }
 
 function deltaHTML(cur, other, label) {
@@ -1201,7 +1274,7 @@ function deltaHTML(cur, other, label) {
 }
 
 function renderResults() {
-  const h = loadHistory();
+  const h = historyStore.load();
   const cur = h[h.length - 1];
   const prev = h.length > 1 ? h[h.length - 2] : null;
   const best = h.reduce((b, s) => s.total_ms < b.total_ms ? s : b);
@@ -1260,13 +1333,12 @@ document.addEventListener("keydown", (e) => {
 
 noteTracker = new NoteTracker(
   (pc, time, cents) => {
-    // If awaiting a sustained first note and the player attacks a new note, abort.
-    if (state === "ready" && pendingStartTimer) cancelStart();
+    if (state === "ready" && pendingStart.active) { pendingStart.cancel(); resetProgress(); }
     if (currentMatcher) currentMatcher.input(pc, time, cents);
   },
   () => {
-    if (state === "ready" && pendingStartTimer) cancelStart();
-    if (state === "playing") cancelRewind();
+    if (state === "ready" && pendingStart.active) { pendingStart.cancel(); resetProgress(); }
+    if (state === "playing") pendingRewind.cancel();
   }
 );
 
