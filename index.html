@@ -842,23 +842,19 @@ const RAW_AUDIO = {
 };
 
 let micPending = false;
-async function initMic(silent = false) {
-  if (audioCtx) return true;
-  if (micPending) return false;
+let sawSignal = false, audioFrames = 0, micRebuilt = false;
+
+// Getting the stream is safe anywhere, but building the AudioContext is not:
+// iOS hands back a permanently silent graph if it is created outside a user
+// gesture. So ask for permission on load and wire up the graph on first input.
+async function requestMic() {
+  if (mediaStream || micPending) return !!mediaStream;
   micPending = true;
   try {
     if (!window.isSecureContext) throw new Error("needs https");
     if (!navigator.mediaDevices?.getUserMedia) throw new Error("no getUserMedia");
     mediaStream = await navigator.mediaDevices.getUserMedia({ audio: RAW_AUDIO });
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === "suspended") await audioCtx.resume();
-    const src = audioCtx.createMediaStreamSource(mediaStream);
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 2048;
-    src.connect(analyser);
-    audioBuf = new Float32Array(analyser.fftSize);
-    setMicStatus(true);
-    detectLoop();
+    micError = "";
     return true;
   } catch (e) {
     micError = e.name === "OverconstrainedError"
@@ -869,6 +865,29 @@ async function initMic(silent = false) {
     micPending = false;
   }
 }
+
+// Call from a user gesture.
+function startAudioGraph() {
+  if (audioCtx || !mediaStream) return false;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = audioCtx.createMediaStreamSource(mediaStream);
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  src.connect(analyser);
+  audioBuf = new Float32Array(analyser.fftSize);
+  audioCtx.resume?.();
+  sawSignal = false;
+  audioFrames = 0;
+  setMicStatus(true);
+  detectLoop();
+  return true;
+}
+
+async function initMic() {
+  if (!await requestMic()) return false;
+  return audioCtx ? true : startAudioGraph();
+}
+
 async function resumeAudioIfNeeded() {
   if (audioCtx && audioCtx.state === "suspended") {
     try { await audioCtx.resume(); } catch {}
@@ -885,6 +904,8 @@ function detectLoop() {
   if (!analyser) return;
   analyser.getFloatTimeDomainData(audioBuf);
   const { freq, rms } = autoCorrelate(audioBuf, audioCtx.sampleRate);
+  audioFrames++;
+  if (rms > 0) sawSignal = true;
   const active = state === "playing" || state === "ready";
   if (noteTracker && active) noteTracker.process(rms, freq);
   if (micDebug) {
@@ -1403,8 +1424,19 @@ window.addEventListener("resize", fitChordSize);
 document.getElementById("mic-warn").addEventListener("click", () => initMic());
 
 async function ensureAudio() {
-  if (audioCtx) return resumeAudioIfNeeded();
-  if (await initMic(true) && state === "ready") render();
+  if (!audioCtx) {
+    if (await initMic() && state === "ready") render();
+    return;
+  }
+  await resumeAudioIfNeeded();
+  // A graph built without a gesture can look live but read pure silence.
+  // If it has run a while with literally zero signal, rebuild it once.
+  if (!sawSignal && audioFrames > 30 && !micRebuilt) {
+    micRebuilt = true;
+    try { await audioCtx.close(); } catch {}
+    audioCtx = analyser = audioBuf = null;
+    startAudioGraph();
+  }
 }
 ["click", "touchend", "keydown"].forEach(evt =>
   document.addEventListener(evt, ensureAudio, { passive: true })
@@ -1424,7 +1456,7 @@ start();
 
 // Ask for the mic straight away; ensureAudio() retries on first gesture if
 // the browser wants one.
-initMic(true).then(ok => { if (ok && state === "ready") render(); });
+requestMic();
 </script>
 </body>
 </html>
