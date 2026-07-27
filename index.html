@@ -845,7 +845,6 @@ const RAW_AUDIO = {
 };
 
 let micPending = false;
-let sawSignal = false, audioFrames = 0, micRebuilt = false;
 
 // Getting the stream is safe anywhere, but building the AudioContext is not:
 // iOS hands back a permanently silent graph if it is created outside a user
@@ -879,8 +878,6 @@ function startAudioGraph() {
   src.connect(analyser);
   audioBuf = new Float32Array(analyser.fftSize);
   audioCtx.resume?.();
-  sawSignal = false;
-  audioFrames = 0;
   setMicStatus(true);
   detectLoop();
   return true;
@@ -907,8 +904,6 @@ function detectLoop() {
   if (!analyser) return;
   analyser.getFloatTimeDomainData(audioBuf);
   const { freq, rms } = autoCorrelate(audioBuf, audioCtx.sampleRate);
-  audioFrames++;
-  if (rms > 0) sawSignal = true;
   const active = state === "playing" || state === "ready";
   if (noteTracker && active) noteTracker.process(rms, freq);
   if (micDebug) {
@@ -1429,24 +1424,12 @@ window.addEventListener("resize", fitChordSize);
 // so retry on the first one. iOS also parks the context in "suspended".
 document.getElementById("mic-warn").addEventListener("click", () => initMic());
 
+// A backgrounded tab can suspend the context, so resume on any gesture.
 async function ensureAudio() {
-  if (!audioCtx) {
-    if (await initMic() && state === "ready") render();
-    return;
-  }
-  await resumeAudioIfNeeded();
-  // A graph built without a gesture can look live but read pure silence.
-  // If it has run a while with literally zero signal, rebuild it once.
-  if (!sawSignal && audioFrames > 30 && !micRebuilt) {
-    micRebuilt = true;
-    try { await audioCtx.close(); } catch {}
-    audioCtx = analyser = audioBuf = null;
-    startAudioGraph();
-  }
+  if (audioCtx) return resumeAudioIfNeeded();
+  if (await initMic() && state === "ready") render();
 }
-// pointerdown/touchstart fire on finger-down rather than release, so the
-// graph is live as early as the browser allows.
-["pointerdown", "touchstart", "keydown", "click"].forEach(evt =>
+["pointerdown", "keydown"].forEach(evt =>
   document.addEventListener(evt, ensureAudio, { passive: true })
 );
 
