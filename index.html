@@ -1438,7 +1438,9 @@ async function ensureAudio() {
     startAudioGraph();
   }
 }
-["click", "touchend", "keydown"].forEach(evt =>
+// pointerdown/touchstart fire on finger-down rather than release, so the
+// graph is live as early as the browser allows.
+["pointerdown", "touchstart", "keydown", "click"].forEach(evt =>
   document.addEventListener(evt, ensureAudio, { passive: true })
 );
 
