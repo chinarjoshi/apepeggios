@@ -14,6 +14,9 @@
     --muted: #666;
     --dim: #333;
     --surface: #242424;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --up: #6db4ee;
+    --up2: #58d8c9;
     --accent: #ffd866;
     --good: #8dd88d;
     --bad: #ff6b6b;
@@ -33,7 +36,8 @@
   }
   .topbar > * { pointer-events: auto; }
   .mic-debug {
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-family: var(--mono);
+    white-space: pre;   /* keep the padStart alignment; HTML collapses runs of spaces */
     font-size: 0.65rem;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
@@ -47,7 +51,6 @@
     font-weight: 500;
     letter-spacing: -0.01em;
     user-select: none;
-    text-decoration: none;
   }
   .brand .trumpet {
     display: inline-block;
@@ -65,7 +68,7 @@
   body {
     background: var(--bg);
     color: var(--fg);
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-family: var(--mono);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -187,29 +190,31 @@
      when its name appears. A zero-width char keeps the height constant. */
   .sequence .note::before { content: "\200b"; }
   .sequence .note.phase-up {
-    background: rgba(109, 180, 238, 0.15);
-    color: #6db4ee;
-    border-color: #6db4ee;
+    background: color-mix(in srgb, var(--up) 15%, transparent);
+    color: var(--up);
+    border-color: var(--up);
   }
   .sequence .note.phase-up2 {
-    background: rgba(88, 216, 201, 0.18);
-    color: #58d8c9;
-    border-color: #58d8c9;
+    background: color-mix(in srgb, var(--up2) 18%, transparent);
+    color: var(--up2);
+    border-color: var(--up2);
   }
   .sequence .note.phase-down {
-    background: rgba(141, 216, 141, 0.15);
+    background: color-mix(in srgb, var(--good) 15%, transparent);
     color: var(--good);
     border-color: var(--good);
   }
   .sequence .note.phase-arp {
-    background: rgba(255, 216, 102, 0.22);
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
     color: var(--accent);
     border-color: var(--accent);
   }
   .sequence .note.current {
     box-shadow: 0 0 0 2px var(--fg);
   }
-  .sequence .note.placeholder { border-color: transparent; }
+  .sequence .note[data-slot] { cursor: pointer; }
+  /* Hidden until played, but still clickable via each note's hit strip. */
+  .sequence .note.placeholder { border-color: transparent; cursor: default; }
 
   .heard {
     display: flex;
@@ -222,7 +227,7 @@
   .heard-text {
     fill: var(--fg);
     font-size: 22px;
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-family: var(--mono);
     font-variant-numeric: tabular-nums;
     transition: fill 0.12s ease;
   }
@@ -263,7 +268,7 @@
     border: none;
     padding: 0.4rem 0.8rem;
     border-radius: 5px;
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-family: var(--mono);
     font-size: 0.75rem;
     font-weight: 600;
     cursor: pointer;
@@ -280,8 +285,8 @@
   .mic-warn:active { transform: translateY(3px) scale(0.96); }
   .mic-warn.hidden { display: none; }
   @keyframes mic-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.55); }
-    70%      { box-shadow: 0 0 0 7px rgba(255, 107, 107, 0); }
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--bad) 55%, transparent); }
+    70%      { box-shadow: 0 0 0 7px transparent; }
   }
   @media (prefers-reduced-motion: reduce) {
     .mic-warn { animation: none; }
@@ -366,10 +371,10 @@
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="/" aria-label="apepeggios">
+  <div class="brand">
     <span class="trumpet" aria-hidden="true"></span>
     <span class="wordmark"><span class="ape">ape</span><span class="peggios">peggios</span></span>
-  </a>
+  </div>
   <button id="mic-warn" class="mic-warn">unmute mic</button>
   <span id="mic-debug" class="mic-debug"></span>
 </header>
@@ -378,6 +383,8 @@
 // ===== Music theory =====
 const MAX_ACCIDENTALS = 7;   // key signatures beyond ±7 sharps/flats are unplayable
 const SEMITONES = 12;
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
 const pcMod = n => ((n % SEMITONES) + SEMITONES) % SEMITONES;   // wrap into pitch class 0..11
 
 const keySharpsMajor = {
@@ -443,7 +450,12 @@ function store(key, fallback, revive) {
 }
 
 const historyStore = store("scales-history-v1", [], v => Array.isArray(v) ? v : undefined);
-const weightsStore = store("scales-weights-v1", defaultWeights, v => ({ ...defaultWeights, ...v }));
+// Filter to known ids — an unrecognised mode would throw in activePools and
+// blank the page, which also meant no mode could ever be renamed or removed.
+const weightsStore = store("scales-weights-v1", defaultWeights, v => ({
+  ...defaultWeights,
+  ...Object.fromEntries(Object.entries(v || {}).filter(([m]) => m in MODE)),
+}));
 const transpositionStore = store("scales-transposition-v1", "C");
 // An empty array is a valid saved state (all patterns off), so only a
 // non-array falls back to the default.
@@ -474,18 +486,20 @@ function buildUnlimitedList(w) {
   return out;
 }
 
-function useFlats(scaleName) {
-  const [key, mode] = scaleName.split(" ");
-  return keySharpsMajor[key] + MODE[mode].offset < 0;
+// Sharps in this mode's signature; negative means flats.
+function signatureOf(name) {
+  const [key, mode] = name.split(" ");
+  return keySharpsMajor[key] + MODE[mode].offset;
 }
+const useFlats = name => signatureOf(name) < 0;
 function noteName(pc, flats) {
   return (flats ? flatNames : sharpNames)[pcMod(pc)];
 }
 
-const letterPCs = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-const letters = ["C", "D", "E", "F", "G", "A", "B"];
+const LETTERS = ["C", "D", "E", "F", "G", "A", "B"];
+const LETTER_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 function spelledName(letter, targetPc) {
-  const base = letterPCs[letter];
+  const base = LETTER_PC[letter];
   let diff = pcMod(targetPc - base);
   if (diff > 6) diff -= 12;
   if (diff === 0) return letter;
@@ -505,10 +519,10 @@ function scaleSpelling(scaleName) {
     return intervals.map(iv => noteName(pcMod(root + iv), flats));
   }
   const rootLetter = key[0];
-  const rootIdx = letters.indexOf(rootLetter);
+  const rootIdx = LETTERS.indexOf(rootLetter);
   return intervals.map((iv, i) => {
     const targetPc = pcMod(root + iv);
-    const letter = letters[(rootIdx + i) % 7];
+    const letter = LETTERS[(rootIdx + i) % 7];
     return spelledName(letter, targetPc);
   });
 }
@@ -533,7 +547,7 @@ function scaleContext(scaleName, transposeSemi = 0) {
   const writtenByPc = {};
   scale.forEach((pc, i) => { writtenByPc[pc] = names[i]; });
   return {
-    scale, arp, root,
+    scale, arp,
     slotOfPc,
     octaveSlot: scale.length,
     toConcert: pc => pcMod(pc + transposeSemi),
@@ -550,11 +564,16 @@ function segment(ctx, phase, entries) {
   };
 }
 function compose(segments) {
-  return {
-    pcs: segments.flatMap(s => s.pcs),
-    slots: segments.flatMap(s => s.slots),
-    phases: segments.flatMap(s => s.phases),
-  };
+  const pcs = [], slots = [], phases = [];
+  for (const seg of segments) {
+    // An ascent ending on the octave meets a descent starting there; the
+    // turnaround note is played once, not struck twice.
+    const from = pcs.length && seg.pcs[0] === pcs[pcs.length - 1] ? 1 : 0;
+    for (let i = from; i < seg.pcs.length; i++) {
+      pcs.push(seg.pcs[i]); slots.push(seg.slots[i]); phases.push(seg.phases[i]);
+    }
+  }
+  return { pcs, slots, phases };
 }
 
 // ----- Scale segments -----
@@ -598,40 +617,40 @@ function arp2Seg(ctx) {
   return segment(ctx, "arp", [...up, oct, ...up, oct, ...dn, oct, ...dn, { pc: r, slot: 0 }]);
 }
 
-// Slot for a scale degree that may cross the octave.
-function degSlot(ctx, deg) {
+// Resolve a scale degree to a note, allowing it to run past either end of
+// the octave (8 is the root above, -1 the leading tone below).
+function degNote(ctx, deg) {
   const n = ctx.scale.length;
-  if (deg === n) return ctx.octaveSlot;
-  return deg > n ? deg - n : deg;
+  const idx = ((deg % n) + n) % n;
+  // Exact octave multiples (8, 15, ...) belong on the octave pill.
+  return { pc: ctx.scale[idx], slot: idx === 0 && deg > 0 ? ctx.octaveSlot : idx };
 }
 
-// Intervallic segment: pairs (d, d+step) — thirds are step=2.
-function intervalSeg(ctx, step, phase = "up", direction = "up") {
-  const n = ctx.scale.length;
+// Pairs a step apart: thirds are step 2. Descending is built from the top
+// down rather than reversed, so it opens 8-6 instead of jumping up to the
+// 9th, and finishes 3-1, 2-7, 1 instead of stopping at 3-1.
+// Walks the scale once per degree and lets `emit` decide what each step
+// plays. `dir` is +1 ascending / -1 descending, so an emit written once works
+// in both directions; the run finishes on the octave or the root.
+function walkSeg(ctx, phase, direction, octaves, emit) {
+  const top = ctx.scale.length * octaves;
+  const up = direction === "up";
   const e = [];
-  for (let d = 0; d < n; d++) {
-    e.push({ pc: ctx.scale[d], slot: d });
-    e.push({ pc: ctx.scale[(d + step) % n], slot: degSlot(ctx, d + step) });
-  }
-  e.push({ pc: ctx.scale[0], slot: ctx.octaveSlot });
-  if (direction === "down") e.reverse();
+  for (let d = up ? 0 : top; up ? d < top : d > 0; up ? d++ : d--) emit(e, d, up ? 1 : -1);
+  e.push(degNote(ctx, up ? top : 0));
   return segment(ctx, phase, e);
 }
 
-// Grouped segment: consecutive groups of `size` (1-2-3, 2-3-4, ...) — "in 3s", "in 4s".
-function groupSeg(ctx, size, phase = "up", direction = "up") {
-  const n = ctx.scale.length;
-  const e = [];
-  for (let d = 0; d < n; d++) {
-    for (let k = 0; k < size; k++) {
-      const deg = d + k;
-      e.push({ pc: ctx.scale[deg % n], slot: degSlot(ctx, deg) });
-    }
-  }
-  e.push({ pc: ctx.scale[0], slot: ctx.octaveSlot });
-  if (direction === "down") e.reverse();
-  return segment(ctx, phase, e);
-}
+// Pairs a step apart: thirds are step 2.
+const intervalSeg = (ctx, step, phase = "up", direction = "up", octaves = 1) =>
+  walkSeg(ctx, phase, direction, octaves,
+    (e, d, dir) => e.push(degNote(ctx, d), degNote(ctx, d + dir * step)));
+
+// Runs of consecutive degrees: 1-2-3, 2-3-4, ...
+const groupSeg = (ctx, size, phase = "up", direction = "up", octaves = 1) =>
+  walkSeg(ctx, phase, direction, octaves, (e, d, dir) => {
+    for (let k = 0; k < size; k++) e.push(degNote(ctx, d + dir * k));
+  });
 
 // ----- Patterns -----
 const patterns = {
@@ -647,8 +666,18 @@ const patterns = {
     },
     branchIdx: ctx => ctx.scale.length + 1,
   },
-  thirds:  { single: ctx => compose([intervalSeg(ctx, 2, "up"), intervalSeg(ctx, 2, "down", "down")]) },
-  in3s:    { single: ctx => compose([groupSeg(ctx, 3, "up"),    groupSeg(ctx, 3, "down", "down")]) },
+  thirds: {
+    single: ctx => compose([intervalSeg(ctx, 2, "up"), intervalSeg(ctx, 2, "down", "down")]),
+    double: ctx => compose([intervalSeg(ctx, 2, "up", "up", 2),
+                            intervalSeg(ctx, 2, "down", "down", 2)]),
+    branchIdx: ctx => ctx.scale.length * 2 + 1,
+  },
+  in3s: {
+    single: ctx => compose([groupSeg(ctx, 3, "up"), groupSeg(ctx, 3, "down", "down")]),
+    double: ctx => compose([groupSeg(ctx, 3, "up", "up", 2),
+                            groupSeg(ctx, 3, "down", "down", 2)]),
+    branchIdx: ctx => ctx.scale.length * 3 + 1,
+  },
 };
 
 function buildExpected(scaleName, transposeSemi = 0, patternKey = "scale") {
@@ -661,6 +690,7 @@ function buildExpected(scaleName, transposeSemi = 0, patternKey = "scale") {
     single, double, branchIdx,
     displayNames: ctx.displayNames,
     writtenByPc: ctx.writtenByPc,
+    octaveSlot: ctx.octaveSlot,
   };
 }
 
@@ -736,7 +766,7 @@ function freqToCents(freq) {
 // input level varies wildly by device (a phone and a laptop hand you very
 // different amplitudes for the same trumpet).
 const TRACKER = {
-  stability: 2,      // consecutive frames on the same pitch before it counts as a note
+  holdMs: 250,       // a pitch must be sustained this long to count as played
   onRatio: 10,       // attack when RMS exceeds this multiple of the floor
   offRatio: 0.4,     // release when RMS drops below this fraction of the attack gate
   minOn: 0.006,      // absolute floor so a silent room doesn't trigger on nothing
@@ -750,82 +780,74 @@ const TRACKER = {
 const GATE_BOOST = window.matchMedia("(hover: hover)").matches ? 1.8 : 1;
 
 class NoteTracker {
-  constructor(onNote, onSilence) {
+  constructor(onNote) {
     this.onNote = onNote;
-    this.onSilence = onSilence || (() => {});
     this.reset();
-    this.STABILITY = TRACKER.stability;
     this.noiseFloor = null;
   }
   reset() {
     this.state = "silent";
     this.currentPC = -1;
     this.candPC = -1;
-    this.candCount = 0;
+    this.candSince = 0;
   }
   get rmsOn() {
     const scaled = (this.noiseFloor ?? 0) * TRACKER.onRatio * GATE_BOOST;
     return Math.min(TRACKER.maxOn * GATE_BOOST,
                     Math.max(TRACKER.minOn * GATE_BOOST, scaled));
   }
-  process(rms, freq) {
-    // Only sample the ambient floor between notes; fall fast, rise slow.
+  process(rms, freq, now) {
+    const onGate = this.rmsOn;
     if (this.state === "silent") {
+      // Seed from the very first frame at any level. With no floor the gate
+      // sits at its minimum, so a room louder than that could never satisfy
+      // the "quiet enough to sample" test and would be treated as signal
+      // for the whole session.
       if (this.noiseFloor === null) this.noiseFloor = rms;
-      const a = rms < this.noiseFloor ? TRACKER.floorFall : TRACKER.floorRise;
-      this.noiseFloor += (rms - this.noiseFloor) * a;
-      // Sustained sound must not be mistaken for room noise, or the gate
-      // chases the signal upward and can never be crossed.
+      // Thereafter only track while genuinely quiet, or the bar climbs in
+      // step with the playing and can never be crossed.
+      else if (rms < onGate) {
+        const a = rms < this.noiseFloor ? TRACKER.floorFall : TRACKER.floorRise;
+        this.noiseFloor += (rms - this.noiseFloor) * a;
+      }
       this.noiseFloor = Math.min(this.noiseFloor, TRACKER.maxOn / TRACKER.onRatio);
     }
-    const onGate = this.rmsOn;
     if (this.state === "playing" && rms < onGate * TRACKER.offRatio) {
-      this.state = "silent"; this.currentPC = -1; this.candPC = -1; this.candCount = 0;
-      this.onSilence();
+      this.state = "silent"; this.currentPC = -1; this.candPC = -1;
       return;
     }
     if (this.state === "silent" && rms < onGate) return;
+
     const pc = freq > 0 ? freqToPC(freq) : -1;
     if (pc < 0) return;
-    const cents = freqToCents(freq);
 
-    if (this.state === "silent") {
-      if (this.candPC === pc) this.candCount++;
-      else { this.candPC = pc; this.candCount = 1; }
-      if (this.candCount >= this.STABILITY) {
-        this.state = "playing"; this.currentPC = pc;
-        this.candPC = -1; this.candCount = 0;
-        this.onNote(pc, cents);
-      }
-    } else {
-      if (pc === this.currentPC) { this.candPC = -1; this.candCount = 0; }
-      else if (pc === this.candPC) {
-        this.candCount++;
-        if (this.candCount >= this.STABILITY) {
-          this.currentPC = pc; this.candPC = -1; this.candCount = 0;
-          this.onNote(pc, cents);
-        }
-      } else { this.candPC = pc; this.candCount = 1; }
-    }
+    // A new pitch has to hold steady before it counts. This is the whole
+    // anti-gliss rule: a slide passes through pitches far too briefly.
+    if (pc !== this.candPC) { this.candPC = pc; this.candSince = now; return; }
+    if (pc === this.currentPC) return;                        // already counted
+    if (now - this.candSince < TRACKER.holdMs) return;        // not held yet
+    this.state = "playing";
+    this.currentPC = pc;
+    this.onNote(pc, freqToCents(freq));
   }
 }
 
 // ===== Matcher =====
 class Matcher {
-  constructor(expected, onProgress, onSuccess, onWrong) {
+  constructor(expected, { onProgress, onSuccess }) {
     this.expected = expected;
     this.matchIdx = 0;
     this.cents = [];
     this.path = null;  // "single" or "double"; decided at branchIdx
+    this.rewindTimer = null;
     this.onProgress = onProgress;
     this.onSuccess = onSuccess;
-    this.onWrong = onWrong;
   }
   currentPath() {
     return this.expected[this.path || "single"];
   }
   input(pc, cents = 0) {
-    pendingRewind.cancel();
+    clearTimeout(this.rewindTimer);   // a new note supersedes a pending rewind
     // At the branch point, choose single or double based on what the player hits.
     if (this.path === null && this.matchIdx === this.expected.branchIdx) {
       if (pc === this.expected.single.pcs[this.matchIdx]) this.path = "single";
@@ -841,39 +863,62 @@ class Matcher {
       }
       return;
     }
-    // Backward search on the committed (or default single) path.
+    // Going back to a note already played rewinds to just past it, but only
+    // after it survives another hold. Any note arriving first cancels it, so
+    // a stray detection you play straight through never costs you progress.
     for (let k = this.matchIdx - 1; k >= 0; k--) {
       if (path.pcs[k] === pc) {
-        pendingRewind.arm({ pc, rewindTo: k + 1, cents });
+        this.rewindTimer = setTimeout(() => {
+          this.cents.length = k + 1;
+          this.cents[k] = cents;
+          this.matchIdx = k + 1;
+          this.onProgress(this.matchIdx);
+        }, TRACKER.holdMs);
         return;
       }
     }
-    this.onWrong();
   }
+  // Stops a pending rewind from firing into a matcher that has been replaced.
+  cancel() { clearTimeout(this.rewindTimer); }
 }
 
 
-// Nobody plays a full scale + arpeggio faster than this, so anything quicker
-// is a manual skip (or a spurious detection) and is left out of the stats.
-const MIN_SCALE_MS = 10_000;
 // Let a correct run sit green long enough to register before moving on.
 const SUCCESS_HOLD_MS = 600;
 
 // ===== Audio =====
+// Read a #rrggbb custom property as [r,g,b] so a colour lives in exactly one
+// place — the :root block.
+// Tuner: fixed 120x140 viewBox; the letter sits in a masked circle at (cx, baselineY).
+const TUNER = {
+  width: 120, height: 140,
+  cx: 60, baselineY: 70, maskRadius: 22, arcLeft: 12, arcRight: 108,
+  maxCents: 40,          // arc saturates here
+  bendPerCent: 2.0,      // control-point rise per cent sharp
+  smoothing: 0.28,       // EMA weight on each new reading
+  redAtCents: 30,        // |cents| where the color reaches full red
+  inTune: [141, 216, 141],      // keep in sync with --good
+  outOfTune: [255, 107, 107],   // keep in sync with --bad
+};
+const FLAT_ARC = `M ${TUNER.arcLeft} ${TUNER.baselineY} Q ${TUNER.cx} ${TUNER.baselineY} ${TUNER.arcRight} ${TUNER.baselineY}`;
+
+function tuningArcPath(cents) {
+  // Sharp → bends upward (control point above baseline). Flat → bends downward.
+  const c = Math.max(-TUNER.maxCents, Math.min(TUNER.maxCents, cents));
+  const controlY = TUNER.baselineY - c * TUNER.bendPerCent;
+  return `M ${TUNER.arcLeft} ${TUNER.baselineY} Q ${TUNER.cx} ${controlY.toFixed(1)} ${TUNER.arcRight} ${TUNER.baselineY}`;
+}
+function centsToColor(cents) {
+  const t = Math.min(Math.abs(cents), TUNER.redAtCents) / TUNER.redAtCents;
+  const rgb = TUNER.inTune.map((from, i) => Math.round(from + (TUNER.outOfTune[i] - from) * t));
+  return `rgb(${rgb.join(",")})`;
+}
+
+let micError = "";
+
 let audioCtx = null, analyser = null, mediaStream = null, audioBuf = null;
 let noteTracker = null;
 let smoothedCents = 0;
-const HOLD_MS = 500;
-function holdTimer(ms, onFire) {
-  let timer = null;
-  return {
-    arm(data) { this.cancel(); timer = setTimeout(() => { timer = null; onFire(data); }, ms); },
-    cancel() { if (timer !== null) { clearTimeout(timer); timer = null; } },
-    get active() { return timer !== null; },
-  };
-}
-// Populated once state/matcher globals are defined below.
-let pendingStart, pendingRewind;
 
 // Processing only hurts pitch detection: AGC fights the RMS gate, noise
 // suppression carves out harmonics, echo cancellation adds artifacts. Raw
@@ -933,7 +978,6 @@ async function resumeAudioIfNeeded() {
     try { await audioCtx.resume(); } catch {}
   }
 }
-let micError = "";
 function setMicStatus(on) {
   const el = document.getElementById("mic-warn");
   if (!el) return;
@@ -945,22 +989,28 @@ function detectLoop() {
   analyser.getFloatTimeDomainData(audioBuf);
   const { freq, rms } = autoCorrelate(audioBuf, audioCtx.sampleRate);
   const active = state === "playing" || state === "ready";
-  if (noteTracker && active) noteTracker.process(rms, freq);
+  if (noteTracker && active && performance.now() > suppressDetectUntil) noteTracker.process(rms, freq, performance.now());
   if (micDebug) {
+    // Dashes stand in at exactly the width of a reading, so the pitch
+    // dropping in and out swaps in place instead of resizing the line.
+    const hz = (freq > 0 ? freq.toFixed(0) + "hz" : "-----").padStart(6);
     micDebug.textContent = `rms ${rms.toFixed(4)} gate ${noteTracker.rmsOn.toFixed(4)}`
-      + ` floor ${(noteTracker.noiseFloor ?? 0).toFixed(4)} ${freq > 0 ? freq.toFixed(0) + "Hz" : "--"}`;
+      + ` floor ${(noteTracker.noiseFloor ?? 0).toFixed(4)} ${hz}`;
   }
-  if (active) renderTuner(freq);
+  if (active) renderTuner(freq, rms);
   requestAnimationFrame(detectLoop);
 }
 
-function renderTuner(freq) {
+function renderTuner(freq, rms) {
   const heardEl = document.getElementById("heard");
   if (!heardEl || !scales[index]) return;
   const textEl = heardEl.querySelector(".heard-text");
   const arcEl = heardEl.querySelector(".tuning-arc");
-  const stable = noteTracker?.state === "playing" && noteTracker.currentPC >= 0;
-  if (!(stable && freq > 0)) {
+  // Follows the live signal rather than the tracker's confirmed note: you
+  // should see the pitch the instant you sound it, even though it takes a
+  // full hold before it counts as played.
+  const sounding = freq > 0 && rms >= (noteTracker?.rmsOn ?? Infinity) * TRACKER.offRatio;
+  if (!sounding) {
     if (textEl) { textEl.textContent = "—"; textEl.style.fill = ""; }
     smoothedCents = 0;
     if (arcEl) { arcEl.setAttribute("d", FLAT_ARC); arcEl.style.stroke = ""; }
@@ -968,7 +1018,7 @@ function renderTuner(freq) {
   }
   const t = transpositions[transposition] || 0;
   const writtenPc = pcMod(freqToPC(freq) - t);
-  const nameMap = currentExpected?.writtenByPc || {};
+  const nameMap = currentMatcher?.expected.writtenByPc || {};
   textEl.textContent = nameMap[writtenPc] || noteName(writtenPc, useFlats(scales[index]));
   smoothedCents += (freqToCents(freq) - smoothedCents) * TUNER.smoothing;
   const color = centsToColor(smoothedCents);
@@ -979,16 +1029,77 @@ function renderTuner(freq) {
   }
 }
 
+// ===== Reference tone =====
+// Sounds at concert pitch, matching what the horn would actually produce.
+let suppressDetectUntil = 0;
+
+function playPitch(concertPc, slot) {
+  if (!audioCtx || !currentMatcher) return;
+  const path = currentMatcher.currentPath();
+  const rel = pcMod(concertPc - path.pcs[0]);
+  const octave = slot === currentMatcher.expected.octaveSlot ? 12 : 0;
+  const midi = 48 + path.pcs[0] + rel + octave;
+  const t = audioCtx.currentTime;
+
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = "triangle";
+  osc.frequency.value = PITCH.a4 * Math.pow(2, (midi - PITCH.a4Midi) / SEMITONES);
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.22, t + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.6);
+
+  // Don't let the speakers feed the tone back into the matcher.
+  suppressDetectUntil = performance.now() + 700;
+  noteTracker?.reset();
+}
+
+// Clicking a pill jumps to the next place that note is due, revealing
+// everything up to it. Searching the committed path means the second octave
+// is only reachable once you've actually chosen it.
+function jumpToSlot(slot) {
+  if (!currentMatcher || nothingSelected()) return;
+  if (state === "ready") beginPlaying();
+  const path = currentMatcher.currentPath();
+  let idx = -1;
+  for (let i = currentMatcher.matchIdx; i < path.slots.length; i++) {
+    if (path.slots[i] === slot) { idx = i; break; }
+  }
+  if (idx < 0) return;
+  currentMatcher.matchIdx = idx + 1;
+  // Jumping past the branch point commits to the path we searched, otherwise
+  // the branch test never fires again and the second octave is locked out.
+  if (currentMatcher.expected.branchIdx !== null
+      && currentMatcher.matchIdx > currentMatcher.expected.branchIdx
+      && currentMatcher.path === null) {
+    currentMatcher.path = "single";
+  }
+  // null, not 0 — a revealed note shouldn't score as perfectly in tune.
+  while (currentMatcher.cents.length < currentMatcher.matchIdx) currentMatcher.cents.push(null);
+  currentMatcher.cents.length = currentMatcher.matchIdx;
+  updateSequenceUI();
+  playPitch(path.pcs[idx], slot);
+}
+
 // ===== App state =====
+// Touch devices skip by tapping; pointer devices skip by keypress only, so a
+// stray click on the page doesn't blow through a scale.
+const isTouch = () => !window.matchMedia("(hover: hover)").matches;
+const restartHint = () => isTouch()
+  ? "<strong>tap</strong> to restart" : "press <strong>key</strong> to restart";
+
 const DEBUG = location.hostname !== "apepeggios.com"
   || new URLSearchParams(location.search).has("debug");
 const app = document.getElementById("app");
 const micDebug = DEBUG ? document.getElementById("mic-debug") : null;
 if (!DEBUG) document.getElementById("mic-debug")?.remove();
-let scales, times, state, startTime, scaleStart, index;
+let scales, times, state, scaleStart, index;
 let skipped = 0;
 let lastSession = null;   // the session just finished, or null if nothing counted
-let currentExpected = null, currentMatcher = null;
+let currentMatcher = null;
 let weights = weightsStore.load();
 let transposition = transpositionStore.load();
 let activePatterns = patternsStore.load();
@@ -996,10 +1107,10 @@ let currentPattern = activePatterns[0];
 let currentNotation = NOTATIONS[0];
 function pickPattern() {
   if (!activePatterns.length) return null;   // all off — same as all modes off
-  return activePatterns[Math.floor(Math.random() * activePatterns.length)];
+  return pick(activePatterns);
 }
 function pickNotation() {
-  return NOTATIONS[Math.floor(Math.random() * NOTATIONS.length)];
+  return pick(NOTATIONS);
 }
 
 function fmt(ms) {
@@ -1014,9 +1125,7 @@ function resetSession() {
   times = [];
   skipped = 0;
   index = 0;
-  startTime = null;
-  currentPattern = pickPattern();
-  currentNotation = pickNotation();
+  repick();
   scales = buildUnlimitedList(weights);
   fitChordSize();
 }
@@ -1025,6 +1134,7 @@ function resetSession() {
 // session, so toggling a mode never resizes the display mid-use.
 const CHORD_MAX_PX = 88;    // phones
 const CHORD_MAX_PX_WIDE = 124;  // roomier screens
+// Canvas needs the stack as a string; must match --mono.
 const CHORD_FONT = '700 %dpx ui-monospace, "SF Mono", Menlo, monospace';
 const LONGEST_CHORD = Object.keys(keySharpsMajor)
   .flatMap(key => MODES.flatMap(m => NOTATIONS.map(n => key + m.chord[n])))
@@ -1062,9 +1172,10 @@ function emptyStateLabel() {
   return `no ${missing.join(" or ")} on`;
 }
 
+// Returns { html, exp } — exp is null when there is nothing to practise.
 function playAreaHTML(scaleName) {
   // Mirror the real layout's structure so toggling the last one off doesn't resize the page.
-  if (nothingSelected()) return `
+  if (nothingSelected()) return { exp: null, html: `
     <div class="scale-title">
       <div class="scale">&nbsp;</div>
       <div class="mode-label">${emptyStateLabel()}</div>
@@ -1072,12 +1183,10 @@ function playAreaHTML(scaleName) {
     </div>
     <div class="sequence"><span class="note placeholder"></span></div>
     <div class="heard"></div>
-  `;
+  ` };
   const exp = buildExpected(scaleName, transpositions[transposition] || 0, currentPattern);
-  currentExpected = exp;
-  const seqHTML = exp.displayNames.map((name, i) =>
-    `<span class="note" data-slot="${i}" data-full="${name}"></span>`
-  ).join("");
+  const seq = exp.displayNames.map((name, i) =>
+    `<span class="note" data-slot="${i}" data-full="${name}"></span>`).join("");
   // Always rendered, mic or not, so enabling the mic doesn't reflow the page.
   const heardHTML = `
     <div class="heard" id="heard">
@@ -1093,19 +1202,19 @@ function playAreaHTML(scaleName) {
       </svg>
     </div>
   `;
-  return `
+  return { exp, html: `
     <div class="scale-title">
       <div class="scale">${chordName(scaleName, currentNotation)}</div>
       <div class="mode-label">${displayMode(modeOf(scaleName))}</div>
       <div class="mode-label">${patternLabels[currentPattern]}</div>
     </div>
-    <div class="sequence" id="sequence">${seqHTML}</div>
+    <div class="sequence" id="sequence">${seq}</div>
     ${heardHTML}
-  `;
+  ` };
 }
 
 function renderStage() {
-  const scaleName = scales[index];
+  const play = playAreaHTML(scales[index]);
   const transposeButtons = Object.keys(transpositions).map(t =>
     `<button class="${t === transposition ? "selected" : ""}" data-trans="${t}">${t}</button>`).join("");
   const patternButtons = patternOptions.map(p =>
@@ -1116,7 +1225,7 @@ function renderStage() {
   const playing = state === "playing";
   app.innerHTML = `
     <div class="stage">
-      <div class="play-area">${playAreaHTML(scaleName)}</div>
+      <div class="play-area">${play.html}</div>
       <div class="swap widgets-bottom">
         <div class="layer ${playing ? "faded" : ""}">
           <div class="option-bar mode-toggles" id="mode-toggles">
@@ -1146,101 +1255,79 @@ function renderStage() {
     </div>
   `;
 
-  if (!nothingSelected()) {
-    updateSequenceUI(0);
-    setupMatcher();
-  } else {
-    currentMatcher = null;
-  }
+  setupMatcher(play.exp);
+  updateSequenceUI();
   attachReadyHandlers();
   if (playing) tickTimer();
 }
 
+function repick() {
+  currentPattern = pickPattern();
+  currentNotation = pickNotation();
+}
+
+// Toggle any of N: `flip` mutates state and reports the button's new state.
+function bindToggles(id, attr, flip) {
+  document.querySelectorAll(`#${id} button`).forEach(btn =>
+    btn.addEventListener("click", e => {
+      e.currentTarget.classList.toggle("selected", flip(e.currentTarget.dataset[attr]));
+      refreshPlayArea();
+    }));
+}
+
 function attachReadyHandlers() {
-  document.querySelectorAll("#transpose-radio button").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      transposition = e.currentTarget.dataset.trans;
-      transpositionStore.save(transposition);
-      document.querySelectorAll("#transpose-radio button").forEach(b => b.classList.toggle("selected", b === e.currentTarget));
-      refreshPlayArea();
-    });
+  const transposeButtons = document.querySelectorAll("#transpose-radio button");
+  transposeButtons.forEach(btn => btn.addEventListener("click", e => {
+    transposition = e.currentTarget.dataset.trans;
+    transpositionStore.save(transposition);
+    transposeButtons.forEach(b => b.classList.toggle("selected", b === e.currentTarget));
+    refreshPlayArea();
+  }));
+  bindToggles("pattern-radio", "pattern", p => {
+    const i = activePatterns.indexOf(p);
+    if (i >= 0) activePatterns.splice(i, 1); else activePatterns.push(p);
+    patternsStore.save(activePatterns);
+    repick();
+    return activePatterns.includes(p);
   });
-  document.querySelectorAll("#pattern-radio button").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      const p = e.currentTarget.dataset.pattern;
-      const idx = activePatterns.indexOf(p);
-      if (idx >= 0) activePatterns.splice(idx, 1);
-      else activePatterns.push(p);
-      patternsStore.save(activePatterns);
-      e.currentTarget.classList.toggle("selected", activePatterns.includes(p));
-      currentPattern = pickPattern();
-      currentNotation = pickNotation();
-      refreshPlayArea();
-    });
-  });
-  document.querySelectorAll("#mode-toggles button").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      const mode = e.currentTarget.dataset.modeToggle;
-      weights[mode] = weights[mode] > 0 ? 0 : 1;
-      weightsStore.save(weights);
-      e.currentTarget.classList.toggle("selected", weights[mode] > 0);
-      resetSession();
-      refreshPlayArea();
-    });
+  bindToggles("mode-toggles", "modeToggle", m => {
+    weights[m] = weights[m] > 0 ? 0 : 1;
+    weightsStore.save(weights);
+    resetSession();
+    return weights[m] > 0;
   });
 }
 
 function refreshPlayArea() {
   const playArea = document.querySelector(".play-area");
   if (!playArea) return;
-  playArea.innerHTML = playAreaHTML(scales[index]);
-  if (!nothingSelected()) {
-    updateSequenceUI(0);
-    setupMatcher();
-  } else {
-    currentMatcher = null;
-  }
+  const play = playAreaHTML(scales[index]);
+  playArea.innerHTML = play.html;
+  setupMatcher(play.exp);
+  updateSequenceUI();
 }
 
-function setupMatcher() {
-  if (!audioCtx || !noteTracker || !currentExpected) { currentMatcher = null; return; }
-  noteTracker.reset();
-  pendingStart.cancel();
-  currentMatcher = new Matcher(
-    currentExpected,
-    (idx) => {
-      updateSequenceUI(idx);
-      if (state !== "ready") return;
-      // One note could be noise, so wait for a sustain; a second correct note
-      // is proof enough on its own.
-      if (idx === 1) pendingStart.arm(currentExpected.single.pcs[0]);
-      else { pendingStart.cancel(); beginPlaying(); }
+function setupMatcher(exp) {
+  currentMatcher?.cancel();
+  noteTracker?.reset();
+  if (!exp) { currentMatcher = null; return; }
+  currentMatcher = new Matcher(exp, {
+    onProgress() {
+      updateSequenceUI();
+      // The tracker only reports sustained pitches, so the first one to
+      // arrive is already proof of real playing.
+      if (state === "ready") beginPlaying();
     },
-    () => onSequenceComplete(),
-    () => flashWrong(),
-  );
+    onSuccess: onSequenceComplete,
+  });
 }
 
 
-// Defined here so they close over updateSequenceUI / beginPlaying.
-pendingStart = holdTimer(HOLD_MS, (pc) => {
-  if (noteTracker?.state === "playing" && noteTracker.currentPC === pc) beginPlaying();
-});
-pendingRewind = holdTimer(HOLD_MS, ({ pc, rewindTo, cents }) => {
-  if (!currentMatcher) return;
-  if (noteTracker?.state === "playing" && noteTracker.currentPC === pc) {
-    currentMatcher.cents.length = rewindTo;
-    currentMatcher.cents[rewindTo - 1] = cents;
-    currentMatcher.matchIdx = rewindTo;
-    updateSequenceUI(rewindTo);
-  }
-});
 
 function beginPlaying() {
   if (state !== "ready" || nothingSelected()) return;
   resumeAudioIfNeeded();
   const now = performance.now();
-  startTime = now;
   scaleStart = now;
   state = "playing";
   // Cross-fade the option layers out and the play layers in; nothing moves.
@@ -1251,38 +1338,16 @@ function beginPlaying() {
 }
 
 
-// Tuner: fixed 120x140 viewBox; the letter sits in a masked circle at (cx, baselineY).
-const TUNER = {
-  width: 120, height: 140,
-  cx: 60, baselineY: 70, maskRadius: 22, arcLeft: 12, arcRight: 108,
-  maxCents: 40,          // arc saturates here
-  bendPerCent: 2.0,      // control-point rise per cent sharp
-  smoothing: 0.28,       // EMA weight on each new reading
-  redAtCents: 30,        // |cents| where the color reaches full red
-  inTune: [141, 216, 141],
-  outOfTune: [255, 107, 107],
-};
-const FLAT_ARC = `M ${TUNER.arcLeft} ${TUNER.baselineY} Q ${TUNER.cx} ${TUNER.baselineY} ${TUNER.arcRight} ${TUNER.baselineY}`;
 
-function tuningArcPath(cents) {
-  // Sharp → bends upward (control point above baseline). Flat → bends downward.
-  const c = Math.max(-TUNER.maxCents, Math.min(TUNER.maxCents, cents));
-  const controlY = TUNER.baselineY - c * TUNER.bendPerCent;
-  return `M ${TUNER.arcLeft} ${TUNER.baselineY} Q ${TUNER.cx} ${controlY.toFixed(1)} ${TUNER.arcRight} ${TUNER.baselineY}`;
-}
-function centsToColor(cents) {
-  const t = Math.min(Math.abs(cents), TUNER.redAtCents) / TUNER.redAtCents;
-  const rgb = TUNER.inTune.map((from, i) => Math.round(from + (TUNER.outOfTune[i] - from) * t));
-  return `rgb(${rgb.join(",")})`;
-}
 
-function updateSequenceUI(matchIdx) {
-  const exp = currentExpected;
-  if (!exp) return;
-  const pathName = currentMatcher?.path || "single";
-  const path = exp[pathName];
+function updateSequenceUI() {
+  if (!currentMatcher) return;
+  const matchIdx = currentMatcher.matchIdx;
+  const path = currentMatcher.currentPath();
   document.querySelectorAll(".sequence .note").forEach(n => {
     n.classList.remove("phase-up", "phase-up2", "phase-down", "phase-arp", "current");
+    // Rewinding must hide the names again, not just drop the colour.
+    if (n.dataset.full) n.textContent = "";
   });
   for (let i = 0; i < matchIdx; i++) {
     const slot = path.slots[i];
@@ -1302,16 +1367,12 @@ function updateSequenceUI(matchIdx) {
   }
 }
 
-let wrongTimer = null;
-function flashWrong() {
-  const seq = document.getElementById("sequence");
-  if (!seq) return;
-  seq.classList.add("wrong");
-  clearTimeout(wrongTimer);
-  wrongTimer = setTimeout(() => seq.classList.remove("wrong"), 250);
-}
+// Held across the success hold so that advancing by hand during it still
+// records the run — the playing already happened.
+let pendingCents = null;
 
 function onSequenceComplete() {
+  pendingCents = currentMatcher?.cents ?? [];
   currentMatcher = null;
   const scaleEl = document.querySelector(".scale");
   if (scaleEl) scaleEl.classList.add("success");
@@ -1320,23 +1381,32 @@ function onSequenceComplete() {
 }
 
 let advanceTimer = null;
-function completeCurrent() {
+// `cents` present means the tracker matched the whole sequence. Called with
+// nothing, it is a manual advance — a skip however long it took, because
+// nothing verified the scale was played.
+function completeCurrent(cents = pendingCents) {
   // A keypress during the success hold would otherwise advance twice.
   clearTimeout(advanceTimer);
   advanceTimer = null;
+  pendingCents = null;
   const now = performance.now();
-  const took = now - scaleStart;
-  if (took >= MIN_SCALE_MS) {
-    const cList = currentMatcher?.cents || [];
-    const avgCents = cList.length ? cList.reduce((s, c) => s + Math.abs(c), 0) / cList.length : null;
-    times.push({ scale: scales[index], ms: took, pattern: currentPattern, cents: avgCents });
+  // scaleStart is stamped when the first note confirms, so only the other
+  // N-1 have to wait out the hold. A genuine run cannot beat that, which
+  // makes anything faster a spurious match rather than a performance.
+  const floorMs = Math.max(0, cents ? cents.length - 1 : 0) * TRACKER.holdMs;
+  if (cents && now - scaleStart >= floorMs) {
+    const cList = cents.filter(c => typeof c === "number");
+    times.push({
+      scale: scales[index],
+      ms: now - scaleStart,
+      cents: cList.length ? mean(cList.map(Math.abs)) : null,
+    });
   } else {
     skipped++;
   }
   scaleStart = now;
   index++;
-  currentPattern = pickPattern();
-  currentNotation = pickNotation();
+  repick();
   if (index >= scales.length) {
     state = "done";
     recordSession();
@@ -1344,12 +1414,15 @@ function completeCurrent() {
   render();
 }
 
+let timerGen = 0;
 function tickTimer() {
-  const el = document.getElementById("timer");
-  if (!el || state !== "playing") return;
-  const now = performance.now();
-  el.innerHTML = `<strong>${fmt(now - scaleStart)}</strong> / scale`;
-  requestAnimationFrame(tickTimer);
+  const gen = ++timerGen;   // supersede any loop from a previous scale
+  (function step() {
+    if (gen !== timerGen || state !== "playing") return;
+    const el = document.getElementById("timer");
+    if (el) el.innerHTML = `<strong>${fmt(performance.now() - scaleStart)}</strong> / scale`;
+    requestAnimationFrame(step);
+  })();
 }
 
 
@@ -1357,7 +1430,7 @@ function recordSession() {
   if (times.length === 0) { lastSession = null; return; }   // all skipped — nothing to save
   const total = times.reduce((s, t) => s + t.ms, 0);
   const cList = times.map(t => t.cents).filter(c => typeof c === "number");
-  const avgCents = cList.length ? cList.reduce((a, b) => a + b, 0) / cList.length : null;
+  const avgCents = cList.length ? mean(cList) : null;
   const session = {
     date: new Date().toISOString(),
     avg_ms: Math.round(total / times.length),
@@ -1389,7 +1462,7 @@ function renderResults() {
     app.innerHTML = `
       <div class="results">
         <div class="session-num">every scale skipped — nothing recorded</div>
-        <div class="hint">${isTouch() ? "<strong>tap</strong> to restart" : "press <strong>key</strong> to restart"}</div>
+        <div class="hint">${restartHint()}</div>
       </div>
     `;
     return;
@@ -1426,7 +1499,7 @@ function renderResults() {
           return `<div class="${c}"><span>${chordName(t.scale)}</span><span class="row-mode">${displayMode(modeOf(t.scale))}</span><span>${fmt(t.ms)}</span></div>`;
         }).join("")}
       </div>
-      <div class="hint">${isTouch() ? "<strong>tap</strong> to restart" : "press <strong>key</strong> to restart"}</div>
+      <div class="hint">${restartHint()}</div>
     </div>
   `;
 }
@@ -1450,13 +1523,13 @@ document.addEventListener("keydown", (e) => {
   advanceFromInput();
 });
 
-// Touch devices skip by tapping; pointer devices skip by keypress only, so a
-// stray click on the page doesn't blow through a scale.
-const isTouch = () => !window.matchMedia("(hover: hover)").matches;
 
+// Pills are interactive on every device; only the empty background skips.
 document.addEventListener("click", (e) => {
+  const pill = e.target.closest(".sequence .note[data-slot]");
+  if (pill) return jumpToSlot(Number(pill.dataset.slot));
   if (!isTouch()) return;
-  if (e.target.closest("button, a, input, select")) return;
+  if (e.target.closest("button, a, input, select, .brand")) return;
   advanceFromInput();
 });
 
@@ -1475,15 +1548,7 @@ async function ensureAudio() {
   document.addEventListener(evt, ensureAudio, { passive: true })
 );
 
-noteTracker = new NoteTracker(
-  (pc, cents) => {
-    if (currentMatcher) currentMatcher.input(pc, cents);
-  },
-  () => {
-    pendingStart.cancel();
-    pendingRewind.cancel();
-  }
-);
+noteTracker = new NoteTracker((pc, cents) => currentMatcher?.input(pc, cents));
 
 start();
 
