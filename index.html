@@ -56,6 +56,7 @@
     padding: 2rem;
   }
   .stage { display: flex; flex-direction: column; align-items: center; gap: 2rem; text-align: center; max-width: 100%; }
+  .play-area { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; }
   .scale {
     font-size: clamp(2.5rem, 8vw, 5.5rem);
     font-weight: 700;
@@ -80,36 +81,62 @@
   .stats strong { color: var(--fg); font-weight: 500; }
   .ready-meta { display: flex; gap: 2rem; color: var(--muted); font-size: 0.95rem; font-variant-numeric: tabular-nums; flex-wrap: wrap; justify-content: center; }
   .ready-meta span strong { color: var(--accent); font-weight: 500; }
-  .widgets { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; }
+  .widgets {
+    display: flex; flex-direction: column; align-items: center; gap: 0.9rem;
+    overflow: hidden;
+    max-height: 40rem;
+    transition: max-height 0.45s ease, opacity 0.35s ease, transform 0.45s ease, margin 0.45s ease;
+  }
+  .widgets.hiding { max-height: 0; opacity: 0; margin: 0 !important; }
+  .widgets-top.hiding { transform: translateY(-1.5rem); }
+  .widgets-bottom.hiding { transform: translateY(1.5rem); }
   .mode-toggles { flex-wrap: wrap; justify-content: center; max-width: 40rem; }
   .btn-reset {
     background: transparent;
     color: var(--muted);
     border: 1px solid var(--dim);
-    padding: 0.35rem 0.8rem;
+    padding: 0.35rem 0.5rem;
     font-family: inherit;
-    font-size: 0.8rem;
     cursor: pointer;
     border-radius: 3px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   .btn-reset:hover { color: var(--fg); border-color: var(--muted); }
-  .duration-radio { display: flex; gap: 0.35rem; }
+  .btn-reset svg { display: block; }
+  .duration-radio { display: flex; gap: 0.3rem; justify-content: center; align-items: center; }
+  .option-icon {
+    color: var(--muted);
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    padding-right: 0.45rem;
+    min-width: 1.6rem;
+    justify-content: center;
+  }
+  .option-icon svg { width: 20px; height: 20px; display: block; }
+  .option-icon.icon-clef {
+    font-family: "Bravura Text", "Segoe UI Symbol", "Apple Symbols", serif;
+    font-size: 2.4rem;
+    line-height: 0.6;
+    padding-bottom: 0.15rem;
+  }
   .duration-radio button {
     background: transparent;
     color: var(--muted);
     border: 1px solid var(--dim);
-    padding: 0.4rem 1rem;
+    padding: 0.25rem 0.7rem;
     font-family: inherit;
-    font-size: 0.9rem;
+    font-size: 0.78rem;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: 3px;
     font-variant-numeric: tabular-nums;
-    min-width: 3rem;
+    min-width: 2.3rem;
   }
   .duration-radio button:hover { color: var(--fg); border-color: var(--muted); }
   .duration-radio button.selected {
-    background: var(--accent);
-    color: #000;
+    color: var(--accent);
     border-color: var(--accent);
   }
   .btn-mic-inline {
@@ -168,12 +195,20 @@
   }
 
   .heard {
-    color: var(--muted);
-    font-size: 0.9rem;
-    font-variant-numeric: tabular-nums;
-    min-height: 1.2em;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 90px;
+    width: 120px;
   }
-  .heard strong { color: var(--fg); font-weight: 500; }
+  .heard svg { width: 100%; height: 100%; }
+  .heard-circle { fill: transparent; stroke: var(--dim); stroke-width: 1.5; }
+  .heard-text {
+    fill: var(--fg);
+    font-size: 22px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
 
   .btn-primary {
     background: var(--accent);
@@ -204,21 +239,30 @@
   .list .fast { color: var(--accent); }
   .list .slow { color: var(--bad); }
 
-  footer { position: fixed; bottom: 1rem; right: 1rem; display: flex; gap: 0.5rem; align-items: center; }
-  footer button, footer .status {
-    background: transparent;
-    color: var(--muted);
-    border: 1px solid var(--dim);
-    padding: 0.3rem 0.7rem;
-    font-family: inherit;
-    cursor: pointer;
-    border-radius: 3px;
+  .mic-warn {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--bad);
+    border: 1px solid var(--bad);
+    padding: 0.35rem 0.7rem;
+    border-radius: 4px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
     font-size: 0.75rem;
+    background: rgba(255, 107, 107, 0.08);
+    z-index: 10;
   }
-  footer button:hover { color: var(--fg); border-color: var(--muted); }
-  footer .status { cursor: default; }
-  footer .status.on { color: var(--good); border-color: var(--good); }
-  footer .status.off { color: var(--muted); border-color: var(--dim); }
+  .mic-warn::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--bad);
+  }
+  .mic-warn.hidden { display: none; }
 </style>
 </head>
 <body>
@@ -227,12 +271,7 @@
   <span class="wordmark"><span class="ape">ape</span><span class="peggios">peggios</span></span>
 </a>
 <div id="app"></div>
-<footer>
-  <span id="mic-status" class="status off">mic off</span>
-  <button id="btn-export" title="Download history as JSON">export</button>
-  <button id="btn-import" title="Merge history from JSON">import</button>
-  <input type="file" id="import-file" accept=".json" hidden>
-</footer>
+<div id="mic-warn" class="mic-warn">mic muted</div>
 <script>
 // ===== Music theory =====
 const keySharpsMajor = {
@@ -290,12 +329,6 @@ const durationOptions = ["10", "20", "30", "unlimited"];  // minutes
 function loadDuration() { return localStorage.getItem(DURATION_KEY) || defaultDuration; }
 function saveDuration(d) { localStorage.setItem(DURATION_KEY, d); }
 
-const ARPEGGIO_KEY = "scales-arpeggio-v1";
-function loadArpeggio() {
-  const v = localStorage.getItem(ARPEGGIO_KEY);
-  return v === null ? true : v === "true";
-}
-function saveArpeggio(b) { localStorage.setItem(ARPEGGIO_KEY, b ? "true" : "false"); }
 
 function loadWeights() {
   try {
@@ -372,26 +405,34 @@ function chordName(scaleName) {
 }
 function modeOf(scaleName) { return scaleName.split(" ")[1]; }
 function displayMode(mode) { return mode.replace(/([a-z])([A-Z])/g, "$1 $2"); }
-function expectedSequence(scaleName, transposeSemi = 0, withArpeggio = true) {
+const modeShort = {
+  "Major": "maj", "Minor": "min", "Dorian": "dor", "Mixolydian": "mix",
+  "Blues": "blu", "MelodicMinor": "mel", "HarmonicMinor": "har",
+};
+function expectedSequence(scaleName, transposeSemi = 0) {
   const [key, mode] = scaleName.split(" ");
   const root = rootPC[key];
   const scale = modeIntervals[mode].map(i => (i + root) % 12);
   const arp = arpeggioIntervals[mode].map(i => (i + root) % 12);
-  const up = [...scale, root];                 // ascending, incl. top octave
-  const down = [...scale].reverse();           // descending, ending on root
-  let writtenPcs = [...up, ...down];
-  if (withArpeggio) {
-    const arpUp = arp.slice(1);                  // 3-5-7 (drop leading root)
-    const arpDown = arp.slice(0, -1).reverse();  // 5-3-root
-    writtenPcs = [...writtenPcs, ...arpUp, ...arpDown];
-  }
+  const slotOfPc = {};
+  scale.forEach((pc, i) => { slotOfPc[pc] = i; });
+  const octaveSlot = scale.length;
+  const displayPcs = [...scale, root];
+  const up = [...scale, root];
+  const down = [...scale].reverse();
+  const arpUp = arp.slice(1);                  // 3-5-7
+  const arpDown = arp.slice(0, -1).reverse();  // 5-3-root
+  const writtenPcs = [...up, ...down, ...arpUp, ...arpDown];
+  const slotsUp = [...scale.map((_, i) => i), octaveSlot];
+  const slotsDown = scale.map((_, i) => scale.length - 1 - i);
+  const slots = [...slotsUp, ...slotsDown,
+                 ...arpUp.map(pc => slotOfPc[pc]),
+                 ...arpDown.map(pc => slotOfPc[pc])];
   const toConcert = pc => ((pc + transposeSemi) % 12 + 12) % 12;
-  const pcs = writtenPcs.map(toConcert);       // what the mic hears (concert)
+  const pcs = writtenPcs.map(toConcert);
   const upEnd = up.length;
   const downEnd = upEnd + down.length;
-  const slotForPc = {};
-  scale.forEach((pc, i) => { slotForPc[toConcert(pc)] = i; });
-  return { pcs, upEnd, downEnd, uniquePcs: scale, slotForPc, bars: new Set() };
+  return { pcs, upEnd, downEnd, displayPcs, slots, bars: new Set() };
 }
 
 function phaseAt(idx, exp) {
@@ -444,6 +485,10 @@ function freqToPC(freq) {
   const midi = Math.round(69 + 12 * Math.log2(freq / 440));
   return ((midi % 12) + 12) % 12;
 }
+function freqToCents(freq) {
+  const midi = 69 + 12 * Math.log2(freq / 440);
+  return (midi - Math.round(midi)) * 100;  // in [-50, 50)
+}
 
 // ===== Note tracker: emits a note event on each stable pitch onset =====
 class NoteTracker {
@@ -460,13 +505,15 @@ class NoteTracker {
     this.candPC = -1;
     this.candCount = 0;
   }
-  process(rms, pc, time) {
+  process(rms, freq, time) {
     if (this.state === "playing" && rms < this.RMS_OFF) {
       this.state = "silent"; this.currentPC = -1; this.candPC = -1; this.candCount = 0;
       return;
     }
     if (this.state === "silent" && rms < this.RMS_ON) return;
+    const pc = freq > 0 ? freqToPC(freq) : -1;
     if (pc < 0) return;
+    const cents = freqToCents(freq);
 
     if (this.state === "silent") {
       if (this.candPC === pc) this.candCount++;
@@ -474,7 +521,7 @@ class NoteTracker {
       if (this.candCount >= this.STABILITY) {
         this.state = "playing"; this.currentPC = pc;
         this.candPC = -1; this.candCount = 0;
-        this.onNote(pc, time);
+        this.onNote(pc, time, cents);
       }
     } else {
       if (pc === this.currentPC) { this.candPC = -1; this.candCount = 0; }
@@ -482,7 +529,7 @@ class NoteTracker {
         this.candCount++;
         if (this.candCount >= this.STABILITY) {
           this.currentPC = pc; this.candPC = -1; this.candCount = 0;
-          this.onNote(pc, time);
+          this.onNote(pc, time, cents);
         }
       } else { this.candPC = pc; this.candCount = 1; }
     }
@@ -495,13 +542,15 @@ class Matcher {
     this.expected = expected;
     this.matchIdx = 0;
     this.times = [];
+    this.cents = [];
     this.onProgress = onProgress;
     this.onSuccess = onSuccess;
     this.onWrong = onWrong;
   }
-  input(pc, time) {
+  input(pc, time, cents = 0) {
     if (pc === this.expected.pcs[this.matchIdx]) {
       this.times.push(time);
+      this.cents.push(cents);
       this.matchIdx++;
       this.onProgress(this.matchIdx);
       if (this.matchIdx === this.expected.pcs.length) {
@@ -511,6 +560,7 @@ class Matcher {
       this.onWrong();
       this.matchIdx = 0;
       this.times = [];
+      this.cents = [];
     }
   }
 }
@@ -533,13 +583,19 @@ const TIMING_CV_MAX = 1.2;  // lenient (higher = more forgiving)
 // ===== Audio =====
 let audioCtx = null, analyser = null, mediaStream = null, audioBuf = null;
 let noteTracker = null;
+let smoothedCents = 0;
 
 async function initMic(silent = false) {
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+      audio: {
+        echoCancellation: { ideal: false },
+        noiseSuppression: { ideal: false },
+        autoGainControl: { ideal: false },
+      }
     });
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") await audioCtx.resume();
     const src = audioCtx.createMediaStreamSource(mediaStream);
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 2048;
@@ -557,21 +613,33 @@ async function initMic(silent = false) {
     return false;
   }
 }
+async function resumeAudioIfNeeded() {
+  if (audioCtx && audioCtx.state === "suspended") {
+    try { await audioCtx.resume(); } catch {}
+  }
+}
 function setMicStatus(on) {
-  const el = document.getElementById("mic-status");
-  el.textContent = on ? "mic on" : "mic off";
-  el.className = "status " + (on ? "on" : "off");
+  const el = document.getElementById("mic-warn");
+  if (el) el.classList.toggle("hidden", on);
 }
 function detectLoop() {
   if (!analyser) return;
   analyser.getFloatTimeDomainData(audioBuf);
   const { freq, rms } = autoCorrelate(audioBuf, audioCtx.sampleRate);
-  const pc = freq > 0 ? freqToPC(freq) : -1;
-  if (noteTracker && state === "playing") noteTracker.process(rms, pc, performance.now());
+  const active = state === "playing" || state === "ready";
+  if (noteTracker && active) noteTracker.process(rms, freq, performance.now());
   const heardEl = document.getElementById("heard");
-  if (heardEl && state === "playing") {
+  if (heardEl && active && scales[index]) {
     const flats = useFlats(scales[index]);
-    heardEl.innerHTML = pc >= 0 ? `heard <strong>${noteName(pc, flats)}</strong>` : `heard <strong>—</strong>`;
+    const textEl = heardEl.querySelector(".heard-text");
+    if (freq > 0 && textEl) {
+      const concertPc = freqToPC(freq);
+      const t = transpositions[transposition] || 0;
+      const writtenPc = ((concertPc - t) % 12 + 12) % 12;
+      textEl.textContent = noteName(writtenPc, flats);
+    } else if (textEl) {
+      textEl.textContent = "—";
+    }
   }
   requestAnimationFrame(detectLoop);
 }
@@ -583,7 +651,6 @@ let currentExpected = null, currentMatcher = null;
 let weights = loadWeights();
 let duration = loadDuration();
 let transposition = loadTransposition();
-let includeArpeggio = loadArpeggio();
 let targetMs = null;  // null = unlimited
 
 function shuffle(a) {
@@ -640,20 +707,28 @@ function render() {
 
 function playAreaHTML(scaleName) {
   if (!scaleName) return `<div class="subtitle">no modes on</div>`;
-  const exp = expectedSequence(scaleName, transpositions[transposition] || 0, includeArpeggio);
+  const exp = expectedSequence(scaleName, transpositions[transposition] || 0);
   currentExpected = exp;
   const flats = useFlats(scaleName);
-  const seqHTML = exp.uniquePcs.map((pc, i) => {
+  const seqHTML = exp.displayPcs.map((pc, i) => {
     const full = noteName(pc, flats);
     return `<span class="note" data-slot="${i}" data-full="${full}">${letterOnly(full)}</span>`;
   }).join("");
+  const heardHTML = audioCtx ? `
+    <div class="heard" id="heard">
+      <svg viewBox="0 0 120 90" xmlns="http://www.w3.org/2000/svg">
+        <circle class="heard-circle" cx="60" cy="45" r="26"/>
+        <text class="heard-text" x="60" y="53" text-anchor="middle">—</text>
+      </svg>
+    </div>
+  ` : "";
   return `
     <div class="scale-title">
       <div class="scale">${chordName(scaleName)}</div>
       <div class="mode-label">${displayMode(modeOf(scaleName))}</div>
     </div>
     <div class="sequence" id="sequence">${seqHTML}</div>
-    <div class="heard" id="heard">${audioCtx ? "heard <strong>—</strong>" : ""}</div>
+    ${heardHTML}
   `;
 }
 
@@ -675,21 +750,23 @@ function renderReady() {
   const transposeButtons = Object.keys(transpositions).map(t =>
     `<button class="${t === transposition ? "selected" : ""}" data-trans="${t}">${t}</button>`).join("");
   const modeButtons = allModes.map(m =>
-    `<button class="${weights[m] > 0 ? "selected" : ""}" data-mode-toggle="${m}">${displayMode(m)}</button>`).join("");
-  const arpButton = `<button class="${includeArpeggio ? "selected" : ""}" data-arp-toggle>arpeggio</button>`;
+    `<button class="${weights[m] > 0 ? "selected" : ""}" data-mode-toggle="${m}">${modeShort[m]}</button>`).join("");
 
   app.innerHTML = `
     <div class="stage">
       <div class="widgets widgets-top">
         ${meta}
-        <div class="duration-radio" id="duration-radio">${durationButtons}</div>
-        <div class="duration-radio" id="transpose-radio">${transposeButtons}</div>
+        <div class="duration-radio" id="duration-radio"><span class="option-icon" aria-hidden="true">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 5v5l3 2"/></svg>
+        </span>${durationButtons}</div>
+        <div class="duration-radio" id="transpose-radio"><span class="option-icon icon-clef" aria-hidden="true">𝄞</span>${transposeButtons}</div>
       </div>
       <div class="play-area">${playAreaHTML(scaleName)}</div>
       <div class="widgets widgets-bottom">
         <div class="duration-radio mode-toggles" id="mode-toggles">${modeButtons}</div>
-        <div class="duration-radio" id="arp-toggle">${arpButton}</div>
-        <button class="btn-reset" id="btn-reset">reset to defaults</button>
+        <button class="btn-reset" id="btn-reset" title="reset to defaults" aria-label="reset to defaults">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
+        </button>
         ${!audioCtx ? `<button class="btn-mic-inline" id="btn-enable-mic">enable microphone for auto-advance</button>` : ""}
       </div>
     </div>
@@ -708,10 +785,8 @@ function attachReadyHandlers() {
   document.getElementById("btn-reset")?.addEventListener("click", () => {
     weights = { ...defaultWeights };
     duration = defaultDuration;
-    includeArpeggio = true;
     saveWeightsToStorage(weights);
     saveDuration(duration);
-    saveArpeggio(includeArpeggio);
     start();
   });
   document.querySelectorAll("#duration-radio button").forEach(btn => {
@@ -740,12 +815,6 @@ function attachReadyHandlers() {
       resetSession();
       refreshPlayArea();
     });
-  });
-  document.querySelector("#arp-toggle button")?.addEventListener("click", (e) => {
-    includeArpeggio = !includeArpeggio;
-    saveArpeggio(includeArpeggio);
-    e.currentTarget.classList.toggle("selected", includeArpeggio);
-    refreshPlayArea();
   });
   document.getElementById("btn-enable-mic")?.addEventListener("click", async () => {
     const ok = await initMic();
@@ -781,11 +850,14 @@ function setupMatcher() {
 
 function beginPlaying() {
   if (state !== "ready" || !scales[index]) return;
+  resumeAudioIfNeeded();
   const now = performance.now();
   startTime = now;
   scaleStart = now;
   state = "playing";
-  document.querySelectorAll(".widgets").forEach(el => el.remove());
+  const widgets = document.querySelectorAll(".widgets");
+  widgets.forEach(w => w.classList.add("hiding"));
+  setTimeout(() => widgets.forEach(w => w.remove()), 460);
   const playArea = document.querySelector(".play-area");
   if (playArea && !playArea.querySelector(".stats")) {
     playArea.insertAdjacentHTML("beforeend", `
@@ -817,26 +889,46 @@ function renderPlaying() {
   tickTimer();
 }
 
+function tuningArcPath(cents) {
+  // Fixed-size SVG (viewBox 0 0 120 140, circle centered at 60,70 r=26).
+  // Sharp → arc above circle, curving upward. Flat → arc below, curving downward.
+  if (Math.abs(cents) < 4) return "";
+  const c = Math.max(-40, Math.min(40, cents));
+  const sharp = c > 0;
+  const dist = 30 + Math.abs(c) / 40 * 16;   // 30..46 from circle center
+  const arcY = sharp ? 70 - dist : 70 + dist;
+  const controlY = sharp ? arcY - 8 : arcY + 8;
+  return `M ${60 - 26} ${arcY} Q 60 ${controlY} ${60 + 26} ${arcY}`;
+}
+
+function centsToFilter(cents) {
+  // Flat → darker (brightness < 1). Sharp → whiter (brightness > 1, less saturated).
+  const c = Math.max(-50, Math.min(50, cents));
+  if (c < 0) return `brightness(${(1 + c / 60).toFixed(2)})`;
+  if (c > 0) return `brightness(${(1 + c / 100).toFixed(2)}) saturate(${(1 - c / 70).toFixed(2)})`;
+  return "";
+}
 function updateSequenceUI(matchIdx) {
   const exp = currentExpected;
   if (!exp) return;
   document.querySelectorAll(".sequence .note").forEach(n => {
     n.classList.remove("phase-up", "phase-down", "phase-arp", "current");
+    n.style.filter = "";
   });
+  const centsArr = currentMatcher?.cents || [];
   for (let i = 0; i < matchIdx; i++) {
-    const pc = exp.pcs[i];
-    const slot = exp.slotForPc[pc];
+    const slot = exp.slots[i];
     if (slot === undefined) continue;
     const el = document.querySelector(`.sequence .note[data-slot="${slot}"]`);
     if (!el) continue;
     const phase = phaseAt(i, exp);
-    el.classList.remove("phase-up", "phase-down", "phase-arp");
     el.classList.add(`phase-${phase}`);
     if (el.dataset.full) el.textContent = el.dataset.full;
+    const c = centsArr[i];
+    if (checkIntonation && typeof c === "number") el.style.filter = centsToFilter(c);
   }
   if (matchIdx < exp.pcs.length) {
-    const pc = exp.pcs[matchIdx];
-    const slot = exp.slotForPc[pc];
+    const slot = exp.slots[matchIdx];
     if (slot !== undefined) {
       const el = document.querySelector(`.sequence .note[data-slot="${slot}"]`);
       if (el) el.classList.add("current");
@@ -866,7 +958,9 @@ function onSequenceComplete(cv) {
 
 function completeCurrent() {
   const now = performance.now();
-  times.push({ scale: scales[index], ms: now - scaleStart });
+  const cList = currentMatcher?.cents || [];
+  const avgCents = cList.length ? cList.reduce((s, c) => s + Math.abs(c), 0) / cList.length : null;
+  times.push({ scale: scales[index], ms: now - scaleStart, cents: avgCents });
   scaleStart = now;
   index++;
   const elapsed = now - startTime;
@@ -897,11 +991,18 @@ function tickTimer() {
 
 function recordSession() {
   const total = times.reduce((s, t) => s + t.ms, 0);
+  const cList = times.map(t => t.cents).filter(c => typeof c === "number");
+  const avgCents = cList.length ? cList.reduce((a, b) => a + b, 0) / cList.length : null;
   const session = {
     date: new Date().toISOString(),
     total_ms: Math.round(total),
     avg_ms: Math.round(total / times.length),
-    times: times.map(t => ({ scale: t.scale, ms: Math.round(t.ms) })),
+    avg_cents: avgCents !== null ? Math.round(avgCents * 10) / 10 : null,
+    times: times.map(t => ({
+      scale: t.scale,
+      ms: Math.round(t.ms),
+      cents: typeof t.cents === "number" ? Math.round(t.cents * 10) / 10 : null,
+    })),
   };
   const h = loadHistory();
   h.push(session);
@@ -942,6 +1043,7 @@ function renderResults() {
         <div><span>avg / scale</span><strong>${fmt(cur.avg_ms)}</strong></div>
         <div><span>fastest</span><strong>${fmt(fastest.ms)}</strong><em>${chordName(fastest.scale)} · ${displayMode(modeOf(fastest.scale))}</em></div>
         <div><span>slowest</span><strong>${fmt(slowest.ms)}</strong><em>${chordName(slowest.scale)} · ${displayMode(modeOf(slowest.scale))}</em></div>
+        ${cur.avg_cents !== null && cur.avg_cents !== undefined ? `<div><span>avg intonation</span><strong>±${cur.avg_cents}¢</strong>${prev?.avg_cents != null ? `<em>${cur.avg_cents < prev.avg_cents ? "▼" : cur.avg_cents > prev.avg_cents ? "▲" : "="} ${Math.abs(cur.avg_cents - prev.avg_cents).toFixed(1)}¢ vs prev</em>` : ""}</div>` : ""}
       </div>
       <div class="list">
         ${cur.times.map(t => {
@@ -952,40 +1054,6 @@ function renderResults() {
       <div class="hint">press <strong>space</strong> or <strong>esc</strong> to restart</div>
     </div>
   `;
-}
-
-// ===== Export / Import =====
-function exportJSON() {
-  const h = loadHistory();
-  if (h.length === 0) { alert("No history to export yet."); return; }
-  const blob = new Blob([JSON.stringify(h, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `scales-history-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-function importJSON(file) {
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      const data = JSON.parse(reader.result);
-      if (!Array.isArray(data)) throw new Error("expected an array of sessions");
-      for (const s of data) {
-        if (!s.date || typeof s.total_ms !== "number" || !Array.isArray(s.times))
-          throw new Error("session missing required fields");
-      }
-      const existing = loadHistory();
-      const seen = new Set(existing.map(s => s.date));
-      const added = data.filter(s => !seen.has(s.date));
-      const merged = [...existing, ...added].sort((a, b) => a.date.localeCompare(b.date));
-      saveHistory(merged);
-      alert(`Imported ${added.length} new session(s). Total: ${merged.length}.`);
-      if (state === "ready") render();
-    } catch (e) { alert("Import failed: " + e.message); }
-  };
-  reader.readAsText(file);
 }
 
 // ===== Events =====
@@ -1002,17 +1070,13 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-document.getElementById("btn-export").addEventListener("click", exportJSON);
-document.getElementById("btn-import").addEventListener("click", () =>
-  document.getElementById("import-file").click());
-document.getElementById("import-file").addEventListener("change", (e) => {
-  const f = e.target.files[0];
-  if (f) importJSON(f);
-  e.target.value = "";
-});
+// iOS: audio context often lands in "suspended"; resume on any user gesture.
+["click", "touchend", "keydown"].forEach(evt =>
+  document.addEventListener(evt, resumeAudioIfNeeded, { passive: true })
+);
 
-noteTracker = new NoteTracker((pc, time) => {
-  if (currentMatcher) currentMatcher.input(pc, time);
+noteTracker = new NoteTracker((pc, time, cents) => {
+  if (currentMatcher) currentMatcher.input(pc, time, cents);
 });
 
 start();
