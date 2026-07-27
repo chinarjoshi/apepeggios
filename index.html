@@ -92,9 +92,6 @@
   .hint strong { color: var(--fg); font-weight: 600; }
   .stats { display: flex; gap: 3rem; color: var(--muted); font-size: 1rem; font-variant-numeric: tabular-nums; }
   .stats strong { color: var(--fg); font-weight: 500; }
-  /* Matches .stats — the two cross-fade in the same slot, so a size jump shows. */
-  .ready-meta { display: flex; gap: 3rem; color: var(--muted); font-size: 1rem; font-variant-numeric: tabular-nums; flex-wrap: wrap; justify-content: center; }
-  .ready-meta span strong { color: var(--accent); font-weight: 500; }
   /* Layers share one grid cell so swapping them never shifts the page. */
   .swap { display: grid; }
   .swap > .layer {
@@ -302,7 +299,9 @@
       justify-items: center;
       gap: 1.25rem;
     }
-    .widgets-top, .play-area, .widgets-bottom { align-self: center; }
+    .play-area { grid-row: 2; }
+    .widgets-bottom { grid-row: 3; }
+    .play-area, .widgets-bottom { align-self: center; }
     .play-area { gap: 1rem; margin-top: 0; }
     .sequence {
       flex-wrap: nowrap;
@@ -354,13 +353,13 @@ const MODES = [
   // id               short  sym      txt          off  scale             arp
   ["Lydian",         "lyd", "Δ♯11",  "maj7♯11",     1, [0,2,4,6,7,9,11], [0,4,7,11], false],
   ["Major",          "maj", "Δ7",    "maj7",        0, [0,2,4,5,7,9,11], [0,4,7,11], true ],
-  ["Mixolydian",     "mix", "7",     "7",          -1, [0,2,4,5,7,9,10], [0,4,7,10], true ],
+  ["Mixolydian",     "mix", "7",     "7",          -1, [0,2,4,5,7,9,10], [0,4,7,10], false],
   ["MelodicMinor",   "mel", "−Δ7",   "m(maj7)",    -3, [0,2,3,5,7,9,11], [0,3,7,11], false],
-  ["Dorian",         "dor", "−7",    "m7",         -2, [0,2,3,5,7,9,10], [0,3,7,10], true ],
+  ["Dorian",         "dor", "−7",    "m7",         -2, [0,2,3,5,7,9,10], [0,3,7,10], false],
   ["HarmonicMinor",  "har", "−Δ7",   "m(maj7)",    -3, [0,2,3,5,7,8,11], [0,3,7,11], false],
-  ["Minor",          "min", "−7",    "m7",         -3, [0,2,3,5,7,8,10], [0,3,7,10], true ],
+  ["Minor",          "min", "−7",    "m7",         -3, [0,2,3,5,7,8,10], [0,3,7,10], false],
   // Blues has no natural 3rd, so its arp is the in-scale m7.
-  ["Blues",          "blu", "7",     "7",          -3, [0,3,5,6,7,10],   [0,3,7,10], true ],
+  ["Blues",          "blu", "7",     "7",          -3, [0,3,5,6,7,10],   [0,3,7,10], false],
 ].map(([id, short, sym, txt, offset, scale, arp, on]) =>
   ({ id, short, chord: { sym, txt }, offset, scale, arp, on }));
 
@@ -1016,18 +1015,7 @@ function playAreaHTML(scaleName) {
 }
 
 function renderStage() {
-  const h = historyStore.load();
   const scaleName = scales[index];
-  let meta = "";
-  if (h.length > 0) {
-    const best = h.reduce((b, s) => s.avg_ms < b.avg_ms ? s : b);
-    const last = h[h.length - 1];
-    meta = `<div class="ready-meta">
-      <span>sessions <strong>${h.length}</strong></span>
-      <span>best <strong>${fmt(best.avg_ms)}</strong> / scale</span>
-      <span>last <strong>${fmt(last.avg_ms)}</strong> / scale</span>
-    </div>`;
-  }
   const transposeButtons = Object.keys(transpositions).map(t =>
     `<button class="${t === transposition ? "selected" : ""}" data-trans="${t}">${t}</button>`).join("");
   const patternButtons = patternOptions.map(p =>
@@ -1038,15 +1026,6 @@ function renderStage() {
   const playing = state === "playing";
   app.innerHTML = `
     <div class="stage">
-      <div class="swap widgets-top">
-        <div class="layer ${playing ? "faded" : ""}">${meta}</div>
-        <div class="layer ${playing ? "" : "faded"}">
-          <div class="stats">
-            <span><strong>${index + 1}</strong> / ${scales.length}</span>
-            <span id="timer"><strong>0.00s</strong> / scale</span>
-          </div>
-        </div>
-      </div>
       <div class="play-area">${playAreaHTML(scaleName)}</div>
       <div class="swap widgets-bottom">
         <div class="layer ${playing ? "faded" : ""}">
@@ -1067,6 +1046,10 @@ function renderStage() {
           </div>
         </div>
         <div class="layer ${playing ? "" : "faded"}">
+          <div class="stats">
+            <span><strong>${index + 1}</strong> / ${scales.length}</span>
+            <span id="timer"><strong>0.00s</strong> / scale</span>
+          </div>
           <div class="hint">${audioCtx ? "auto-advances on correct play · " : ""}${isTouch() ? "<strong>tap</strong> skips" : "<strong>key</strong> skips · <strong>esc</strong> restarts"}</div>
         </div>
       </div>
