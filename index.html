@@ -83,15 +83,19 @@
   .stats strong { color: var(--fg); font-weight: 500; }
   .ready-meta { display: flex; gap: 2rem; color: var(--muted); font-size: 0.95rem; font-variant-numeric: tabular-nums; flex-wrap: wrap; justify-content: center; }
   .ready-meta span strong { color: var(--accent); font-weight: 500; }
-  .widgets {
-    display: flex; flex-direction: column; align-items: center; gap: 0.9rem;
-    overflow: hidden;
-    max-height: 40rem;
-    transition: max-height 0.45s ease, opacity 0.35s ease, transform 0.45s ease, margin 0.45s ease;
+  .widgets { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; }
+  /* Layers share one grid cell so swapping them never shifts the page. */
+  .swap { display: grid; }
+  .swap > .layer {
+    grid-area: 1 / 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.9rem;
+    transition: opacity 0.3s ease;
   }
-  .widgets.hiding { max-height: 0; opacity: 0; margin: 0 !important; }
-  .widgets-top.hiding { transform: translateY(-1.5rem); }
-  .widgets-bottom.hiding { transform: translateY(1.5rem); }
+  .swap > .layer.faded { opacity: 0; pointer-events: none; }
   .widget-row { display: flex; gap: 0.5rem; align-items: center; justify-content: center; flex-wrap: wrap; }
   .mode-toggles { flex-wrap: wrap; justify-content: center; max-width: 40rem; }
   .btn-reset {
@@ -204,6 +208,7 @@
   .sequence .note.current {
     box-shadow: 0 0 0 2px var(--fg);
   }
+  .sequence .note.placeholder { border-color: transparent; }
 
   .heard {
     display: flex;
@@ -236,7 +241,6 @@
   .btn-primary:hover { background: #ffe088; }
 
   .results { max-width: 44rem; width: 100%; }
-  .results h1 { font-size: 2rem; margin-bottom: 0.25rem; font-weight: 600; }
   .session-num { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
   .deltas { display: flex; gap: 1.5rem; font-size: 0.9rem; color: var(--muted); font-variant-numeric: tabular-nums; margin-bottom: 1.5rem; flex-wrap: wrap; }
   .deltas .better { color: var(--good); }
@@ -246,7 +250,17 @@
   .summary div strong { font-size: 1.4rem; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--accent); }
   .summary div em { display: block; color: var(--fg); font-size: 0.8rem; font-style: normal; margin-top: 0.15rem; }
   .list { max-height: 35vh; overflow-y: auto; font-variant-numeric: tabular-nums; font-size: 0.9rem; margin-bottom: 1.5rem; }
-  .list div { display: flex; justify-content: space-between; padding: 0.4rem 0; border-bottom: 1px solid var(--dim); }
+  .list div {
+    display: grid;
+    grid-template-columns: 6rem 1fr auto;
+    gap: 1rem;
+    align-items: baseline;
+    text-align: left;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--dim);
+  }
+  .list .row-mode { color: var(--muted); }
+  .list .fast .row-mode, .list .slow .row-mode { color: inherit; opacity: 0.7; }
   .list div:last-child { border-bottom: none; }
   .list .fast { color: var(--accent); }
   .list .slow { color: var(--bad); }
@@ -304,17 +318,22 @@ const flatNames  = ["C", "D♭", "D", "E♭", "E", "F", "G♭", "G", "A♭", "A"
 // Every mode in one row: display, key-signature offset from major, scale + arp intervals.
 // Listed brightest → darkest; the mode-toggle row renders in this order.
 const MODES = [
-  // id               short  chord      off  scale                      arp
-  ["Lydian",         "lyd", "maj7#11",   1, [0,2,4,6,7,9,11], [0,4,7,11], false],
-  ["Major",          "maj", "maj7",      0, [0,2,4,5,7,9,11], [0,4,7,11], true ],
-  ["Mixolydian",     "mix", "7",        -1, [0,2,4,5,7,9,10], [0,4,7,10], true ],
-  ["MelodicMinor",   "mel", "minMaj7",  -3, [0,2,3,5,7,9,11], [0,3,7,11], false],
-  ["Dorian",         "dor", "min7",     -2, [0,2,3,5,7,9,10], [0,3,7,10], true ],
-  ["HarmonicMinor",  "har", "minMaj7",  -3, [0,2,3,5,7,8,11], [0,3,7,11], false],
-  ["Minor",          "min", "min7",     -3, [0,2,3,5,7,8,10], [0,3,7,10], true ],
-  // Blues has no natural 3rd, so its arp is the in-scale min7.
-  ["Blues",          "blu", "7",        -3, [0,3,5,6,7,10],   [0,3,7,10], true ],
-].map(([id, short, chord, offset, scale, arp, on]) => ({ id, short, chord, offset, scale, arp, on }));
+  // Two chord spellings per mode, drilled 50-50: jazz shorthand (− = minor,
+  // Δ = major 7th) and the spelled-out form.
+  // id               short  sym      txt          off  scale             arp
+  ["Lydian",         "lyd", "Δ♯11",  "maj7♯11",     1, [0,2,4,6,7,9,11], [0,4,7,11], false],
+  ["Major",          "maj", "Δ7",    "maj7",        0, [0,2,4,5,7,9,11], [0,4,7,11], true ],
+  ["Mixolydian",     "mix", "7",     "7",          -1, [0,2,4,5,7,9,10], [0,4,7,10], true ],
+  ["MelodicMinor",   "mel", "−Δ7",   "m(maj7)",    -3, [0,2,3,5,7,9,11], [0,3,7,11], false],
+  ["Dorian",         "dor", "−7",    "m7",         -2, [0,2,3,5,7,9,10], [0,3,7,10], true ],
+  ["HarmonicMinor",  "har", "−Δ7",   "m(maj7)",    -3, [0,2,3,5,7,8,11], [0,3,7,11], false],
+  ["Minor",          "min", "−7",    "m7",         -3, [0,2,3,5,7,8,10], [0,3,7,10], true ],
+  // Blues has no natural 3rd, so its arp is the in-scale m7.
+  ["Blues",          "blu", "7",     "7",          -3, [0,3,5,6,7,10],   [0,3,7,10], true ],
+].map(([id, short, sym, txt, offset, scale, arp, on]) =>
+  ({ id, short, chord: { sym, txt }, offset, scale, arp, on }));
+
+const NOTATIONS = ["sym", "txt"];
 
 const MODE = Object.fromEntries(MODES.map(m => [m.id, m]));
 const defaultWeights = Object.fromEntries(MODES.map(m => [m.id, m.on ? 1 : 0]));
@@ -325,7 +344,7 @@ const transpositions = {
   "E♭": 3,   // alto sax, bari sax
   "F":  -7,  // french horn
 };
-const durationOptions = ["10", "20", "30", "unlimited"];  // minutes
+const durationOptions = ["5", "10", "30", "unlimited"];  // minutes
 const patternLabels = { scale: "straight", thirds: "3rds", in3s: "in 3s" };
 const patternOptions = Object.keys(patternLabels);
 
@@ -439,9 +458,9 @@ function scaleSpelling(scaleName) {
     return spelledName(letter, targetPc);
   });
 }
-function chordName(scaleName) {
+function chordName(scaleName, notation = "sym") {
   const [key, mode] = scaleName.split(" ");
-  return key + MODE[mode].chord;
+  return key + MODE[mode].chord[notation];
 }
 function modeOf(scaleName) { return scaleName.split(" ")[1]; }
 function displayMode(mode) { return mode.replace(/([a-z])([A-Z])/g, "$1 $2"); }
@@ -770,6 +789,9 @@ function timingCV(times, breaks) {
 }
 
 const TIMING_CV_MAX = 1.2;  // lenient (higher = more forgiving)
+// Nobody plays a full scale + arpeggio faster than this, so anything quicker
+// is a manual skip (or a spurious detection) and is left out of the stats.
+const MIN_SCALE_MS = 10_000;
 
 // ===== Audio =====
 let audioCtx = null, analyser = null, mediaStream = null, audioBuf = null;
@@ -862,16 +884,22 @@ function renderTuner(freq) {
 // ===== App state =====
 const app = document.getElementById("app");
 let scales, times, state, startTime, scaleStart, index;
+let skipped = 0;
+let lastSession = null;   // the session just finished, or null if nothing counted
 let currentExpected = null, currentMatcher = null;
 let weights = weightsStore.load();
 let duration = durationStore.load();
 let transposition = transpositionStore.load();
 let activePatterns = patternsStore.load();
 let currentPattern = activePatterns[0];
+let currentNotation = NOTATIONS[0];
 let targetMs = null;  // null = unlimited
 function pickPattern() {
   const pool = activePatterns.length ? activePatterns : patternOptions.slice(0, 1);
   return pool[Math.floor(Math.random() * pool.length)];
+}
+function pickNotation() {
+  return NOTATIONS[Math.floor(Math.random() * NOTATIONS.length)];
 }
 
 function fmt(ms) {
@@ -884,9 +912,11 @@ function fmt(ms) {
 
 function resetSession() {
   times = [];
+  skipped = 0;
   index = 0;
   startTime = null;
   currentPattern = pickPattern();
+  currentNotation = pickNotation();
   if (duration === "unlimited") {
     scales = buildUnlimitedList(weights);
     targetMs = null;
@@ -905,13 +935,21 @@ function start() {
 }
 
 function render() {
-  if (state === "ready") return renderReady();
   if (state === "done") return renderResults();
-  renderPlaying();
+  renderStage();   // handles both "ready" and "playing"
 }
 
 function playAreaHTML(scaleName) {
-  if (!scaleName) return `<div class="subtitle">no modes on</div>`;
+  // Mirror the real layout's structure so toggling the last mode off doesn't resize the page.
+  if (!scaleName) return `
+    <div class="scale-title">
+      <div class="scale">&nbsp;</div>
+      <div class="mode-label">no modes on</div>
+      <div class="mode-label">&nbsp;</div>
+    </div>
+    <div class="sequence"><span class="note placeholder"></span></div>
+    ${audioCtx ? `<div class="heard"></div>` : ""}
+  `;
   const exp = buildExpected(scaleName, transpositions[transposition] || 0, currentPattern);
   currentExpected = exp;
   const seqHTML = exp.displayNames.map((name, i) =>
@@ -933,7 +971,7 @@ function playAreaHTML(scaleName) {
   ` : "";
   return `
     <div class="scale-title">
-      <div class="scale">${chordName(scaleName)}</div>
+      <div class="scale">${chordName(scaleName, currentNotation)}</div>
       <div class="mode-label">${displayMode(modeOf(scaleName))}</div>
       <div class="mode-label">${patternLabels[currentPattern]}</div>
     </div>
@@ -942,17 +980,17 @@ function playAreaHTML(scaleName) {
   `;
 }
 
-function renderReady() {
+function renderStage() {
   const h = historyStore.load();
   const scaleName = scales[index];
   let meta = "";
   if (h.length > 0) {
-    const best = h.reduce((b, s) => s.total_ms < b.total_ms ? s : b);
+    const best = h.reduce((b, s) => s.avg_ms < b.avg_ms ? s : b);
     const last = h[h.length - 1];
     meta = `<div class="ready-meta">
       <span>sessions <strong>${h.length}</strong></span>
-      <span>best <strong>${fmt(best.total_ms)}</strong></span>
-      <span>last <strong>${fmt(last.total_ms)}</strong></span>
+      <span>best <strong>${fmt(best.avg_ms)}</strong> / scale</span>
+      <span>last <strong>${fmt(last.avg_ms)}</strong> / scale</span>
     </div>`;
   }
   const durationButtons = durationOptions.map(d =>
@@ -964,32 +1002,45 @@ function renderReady() {
   const modeButtons = MODES.map(m =>
     `<button class="${weights[m.id] > 0 ? "selected" : ""}" data-mode-toggle="${m.id}">${m.short}</button>`).join("");
 
+  const playing = state === "playing";
   app.innerHTML = `
     <div class="stage">
-      <div class="widgets widgets-top">
-        ${meta}
+      <div class="swap widgets-top">
+        <div class="layer ${playing ? "faded" : ""}">${meta}</div>
+        <div class="layer ${playing ? "" : "faded"}">
+          <div class="stats">
+            <span><strong>${index + 1}</strong>${targetMs === null ? " / " + scales.length : ""}</span>
+            <span id="timer"><strong>0.00s</strong> / scale</span>
+            ${targetMs !== null ? `<span id="remaining"><strong>${fmt(targetMs)}</strong> left</span>` : ""}
+          </div>
+        </div>
       </div>
       <div class="play-area">${playAreaHTML(scaleName)}</div>
-      <div class="widgets widgets-bottom">
-        <div class="widget-row">
-          <div class="duration-radio" id="duration-radio"><span class="option-icon" aria-hidden="true">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 5v5l3 2"/></svg>
-          </span>${durationButtons}</div>
-          <div class="duration-radio" id="pattern-radio"><span class="option-icon" aria-hidden="true">
-            <svg viewBox="0 0 20 20" fill="currentColor"><ellipse cx="5" cy="15" rx="2.5" ry="1.8"/><ellipse cx="14" cy="13" rx="2.5" ry="1.8"/><rect x="7" y="4" width="1.2" height="11"/><rect x="16" y="2" width="1.2" height="11"/><path d="M8 4.5 L17 2.5" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
-          </span>${patternButtons}</div>
-          <div class="duration-radio" id="transpose-radio"><span class="option-icon icon-clef" aria-hidden="true">𝄞</span>${transposeButtons}</div>
+      <div class="swap widgets-bottom">
+        <div class="layer ${playing ? "faded" : ""}">
+          <div class="widget-row">
+            <div class="duration-radio" id="duration-radio"><span class="option-icon" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 5v5l3 2"/></svg>
+            </span>${durationButtons}</div>
+            <div class="duration-radio" id="pattern-radio"><span class="option-icon" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="currentColor"><ellipse cx="5" cy="15" rx="2.5" ry="1.8"/><ellipse cx="14" cy="13" rx="2.5" ry="1.8"/><rect x="7" y="4" width="1.2" height="11"/><rect x="16" y="2" width="1.2" height="11"/><path d="M8 4.5 L17 2.5" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
+            </span>${patternButtons}</div>
+            <div class="duration-radio" id="transpose-radio"><span class="option-icon icon-clef" aria-hidden="true">𝄞</span>${transposeButtons}</div>
+          </div>
+          <div class="duration-radio mode-toggles" id="mode-toggles">
+            <span class="option-icon icon-sun" aria-hidden="true" title="brightest">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></svg>
+            </span>
+            ${modeButtons}
+            <span class="option-icon icon-moon" aria-hidden="true" title="darkest">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 15.5A8 8 0 0 1 9 5a7 7 0 1 0 11 10.5z"/></svg>
+            </span>
+          </div>
+          ${!audioCtx ? `<button class="btn-mic-inline" id="btn-enable-mic">enable microphone for auto-advance</button>` : ""}
         </div>
-        <div class="duration-radio mode-toggles" id="mode-toggles">
-          <span class="option-icon icon-sun" aria-hidden="true" title="brightest">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></svg>
-          </span>
-          ${modeButtons}
-          <span class="option-icon icon-moon" aria-hidden="true" title="darkest">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 15.5A8 8 0 0 1 9 5a7 7 0 1 0 11 10.5z"/></svg>
-          </span>
+        <div class="layer ${playing ? "" : "faded"}">
+          <div class="hint">${audioCtx ? "auto-advances on correct play · " : ""}<strong>space</strong> skips · <strong>esc</strong> restarts</div>
         </div>
-        ${!audioCtx ? `<button class="btn-mic-inline" id="btn-enable-mic">enable microphone for auto-advance</button>` : ""}
       </div>
     </div>
   `;
@@ -1001,6 +1052,7 @@ function renderReady() {
     currentMatcher = null;
   }
   attachReadyHandlers();
+  if (playing) tickTimer();
 }
 
 function attachReadyHandlers() {
@@ -1034,6 +1086,7 @@ function attachReadyHandlers() {
       patternsStore.save(activePatterns);
       e.currentTarget.classList.toggle("selected", activePatterns.includes(p));
       currentPattern = pickPattern();
+      currentNotation = pickNotation();
       refreshPlayArea();
     });
   });
@@ -1113,39 +1166,13 @@ function beginPlaying() {
   startTime = now;
   scaleStart = now;
   state = "playing";
-  const widgets = document.querySelectorAll(".widgets");
-  widgets.forEach(w => w.classList.add("hiding"));
-  setTimeout(() => widgets.forEach(w => w.remove()), 460);
-  const playArea = document.querySelector(".play-area");
-  if (playArea && !playArea.querySelector(".stats")) {
-    playArea.insertAdjacentHTML("beforeend", `
-      <div class="stats">
-        <span><strong>${index + 1}</strong>${targetMs === null ? " / " + scales.length : ""}</span>
-        <span id="timer"><strong>0.00s</strong></span>
-      </div>
-      <div class="hint">${audioCtx ? "auto-advances on correct play · " : ""}<strong>space</strong> skips · <strong>esc</strong> restarts</div>
-    `);
-  }
+  // Cross-fade the option layers out and the play layers in; nothing moves.
+  document.querySelectorAll(".swap").forEach(swap => {
+    swap.querySelectorAll(".layer").forEach(l => l.classList.toggle("faded"));
+  });
   tickTimer();
 }
 
-function renderPlaying() {
-  const scaleName = scales[index];
-  app.innerHTML = `
-    <div class="stage">
-      <div class="play-area">${playAreaHTML(scaleName)}
-        <div class="stats">
-          <span><strong>${index + 1}</strong>${targetMs === null ? " / " + scales.length : ""}</span>
-          <span id="timer"><strong>0.00s</strong></span>
-        </div>
-        <div class="hint">${audioCtx ? "auto-advances on correct play · " : ""}<strong>space</strong> skips · <strong>esc</strong> restarts</div>
-      </div>
-    </div>
-  `;
-  updateSequenceUI(0);
-  setupMatcher();
-  tickTimer();
-}
 
 // Tuner: fixed 120x140 viewBox; the letter sits in a masked circle at (cx, baselineY).
 const TUNER = {
@@ -1219,12 +1246,18 @@ function onSequenceComplete(cv) {
 
 function completeCurrent() {
   const now = performance.now();
-  const cList = currentMatcher?.cents || [];
-  const avgCents = cList.length ? cList.reduce((s, c) => s + Math.abs(c), 0) / cList.length : null;
-  times.push({ scale: scales[index], ms: now - scaleStart, pattern: currentPattern, cents: avgCents });
+  const took = now - scaleStart;
+  if (took >= MIN_SCALE_MS) {
+    const cList = currentMatcher?.cents || [];
+    const avgCents = cList.length ? cList.reduce((s, c) => s + Math.abs(c), 0) / cList.length : null;
+    times.push({ scale: scales[index], ms: took, pattern: currentPattern, cents: avgCents });
+  } else {
+    skipped++;
+  }
   scaleStart = now;
   index++;
   currentPattern = pickPattern();
+  currentNotation = pickNotation();
   const elapsed = now - startTime;
   const timeUp = targetMs !== null && elapsed >= targetMs;
   const listDone = targetMs === null && index >= scales.length;
@@ -1244,14 +1277,16 @@ function completeCurrent() {
 function tickTimer() {
   const el = document.getElementById("timer");
   if (!el || state !== "playing") return;
-  const elapsed = performance.now() - startTime;
-  const display = targetMs !== null ? Math.max(0, targetMs - elapsed) : elapsed;
-  el.innerHTML = `<strong>${fmt(display)}</strong>`;
+  const now = performance.now();
+  el.innerHTML = `<strong>${fmt(now - scaleStart)}</strong> / scale`;
+  const rem = document.getElementById("remaining");
+  if (rem) rem.innerHTML = `<strong>${fmt(Math.max(0, targetMs - (now - startTime)))}</strong> left`;
   requestAnimationFrame(tickTimer);
 }
 
 
 function recordSession() {
+  if (times.length === 0) { lastSession = null; return; }   // all skipped — nothing to save
   const total = times.reduce((s, t) => s + t.ms, 0);
   const cList = times.map(t => t.cents).filter(c => typeof c === "number");
   const avgCents = cList.length ? cList.reduce((a, b) => a + b, 0) / cList.length : null;
@@ -1260,6 +1295,7 @@ function recordSession() {
     total_ms: Math.round(total),
     avg_ms: Math.round(total / times.length),
     avg_cents: avgCents !== null ? Math.round(avgCents * 10) / 10 : null,
+    skipped,
     times: times.map(t => ({
       scale: t.scale,
       ms: Math.round(t.ms),
@@ -1269,6 +1305,7 @@ function recordSession() {
   const h = historyStore.load();
   h.push(session);
   historyStore.save(h);
+  lastSession = session;
 }
 
 function deltaHTML(cur, other, label) {
@@ -1280,37 +1317,46 @@ function deltaHTML(cur, other, label) {
 }
 
 function renderResults() {
+  const cur = lastSession;
+  if (!cur) {
+    app.innerHTML = `
+      <div class="results">
+        <div class="session-num">every scale skipped — nothing recorded</div>
+        <div class="hint">press <strong>space</strong> or <strong>esc</strong> to restart</div>
+      </div>
+    `;
+    return;
+  }
   const h = historyStore.load();
-  const cur = h[h.length - 1];
   const prev = h.length > 1 ? h[h.length - 2] : null;
-  const best = h.reduce((b, s) => s.total_ms < b.total_ms ? s : b);
-  const isPB = cur.total_ms === best.total_ms && h.length > 1;
+  // Compare per-scale pace, not session totals — the scale count varies with
+  // which modes are toggled on, so totals aren't comparable across sessions.
+  const best = h.reduce((b, s) => s.avg_ms < b.avg_ms ? s : b);
+  const isPB = cur.avg_ms === best.avg_ms && h.length > 1;
   const sorted = cur.times.slice().sort((a, b) => a.ms - b.ms);
   const fastest = sorted[0], slowest = sorted[sorted.length - 1];
   let deltas = "";
   if (prev) {
     deltas = `<div class="deltas">
-      ${deltaHTML(cur.total_ms, prev.total_ms, "prev")}
-      ${deltaHTML(cur.total_ms, best.total_ms, "best")}
+      ${deltaHTML(cur.avg_ms, prev.avg_ms, "prev")}
+      ${deltaHTML(cur.avg_ms, best.avg_ms, "best")}
       ${isPB ? '<span class="better">★ new best</span>' : ""}
     </div>`;
   }
   app.innerHTML = `
     <div class="results">
-      <h1>done</h1>
-      <div class="session-num">session #${h.length}</div>
+      <div class="session-num">session #${h.length}${cur.skipped ? ` · ${cur.skipped} skipped` : ""}</div>
       ${deltas}
       <div class="summary">
-        <div><span>total</span><strong>${fmt(cur.total_ms)}</strong></div>
-        <div><span>avg / scale</span><strong>${fmt(cur.avg_ms)}</strong></div>
-        <div><span>fastest</span><strong>${fmt(fastest.ms)}</strong><em>${chordName(fastest.scale)} · ${displayMode(modeOf(fastest.scale))}</em></div>
-        <div><span>slowest</span><strong>${fmt(slowest.ms)}</strong><em>${chordName(slowest.scale)} · ${displayMode(modeOf(slowest.scale))}</em></div>
+        <div><span>avg / scale</span><strong>${fmt(cur.avg_ms)}</strong><em>over ${cur.times.length} scale${cur.times.length === 1 ? "" : "s"}</em></div>
+        <div><span>fastest scale</span><strong>${fmt(fastest.ms)}</strong><em>${chordName(fastest.scale)} · ${displayMode(modeOf(fastest.scale))}</em></div>
+        <div><span>slowest scale</span><strong>${fmt(slowest.ms)}</strong><em>${chordName(slowest.scale)} · ${displayMode(modeOf(slowest.scale))}</em></div>
         ${cur.avg_cents !== null && cur.avg_cents !== undefined ? `<div><span>avg intonation</span><strong>±${cur.avg_cents}¢</strong>${prev?.avg_cents != null ? `<em>${cur.avg_cents < prev.avg_cents ? "▼" : cur.avg_cents > prev.avg_cents ? "▲" : "="} ${Math.abs(cur.avg_cents - prev.avg_cents).toFixed(1)}¢ vs prev</em>` : ""}</div>` : ""}
       </div>
       <div class="list">
         ${cur.times.map(t => {
           const c = t.ms === fastest.ms ? "fast" : t.ms === slowest.ms ? "slow" : "";
-          return `<div class="${c}"><span>${chordName(t.scale)} · ${displayMode(modeOf(t.scale))}</span><span>${fmt(t.ms)}</span></div>`;
+          return `<div class="${c}"><span>${chordName(t.scale)}</span><span class="row-mode">${displayMode(modeOf(t.scale))}</span><span>${fmt(t.ms)}</span></div>`;
         }).join("")}
       </div>
       <div class="hint">press <strong>space</strong> or <strong>esc</strong> to restart</div>
