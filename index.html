@@ -183,6 +183,9 @@
     color: var(--muted);
     transition: background 0.1s, color 0.1s, border-color 0.1s;
   }
+  /* An empty pill has no line box and collapses to min-height, then grows
+     when its name appears. A zero-width char keeps the height constant. */
+  .sequence .note::before { content: "\200b"; }
   .sequence .note.phase-up {
     background: rgba(109, 180, 238, 0.15);
     color: #6db4ee;
@@ -635,7 +638,7 @@ function getPhaseAt(i, matchIdx, path) {
 
 // ===== Pitch detection (autocorrelation) =====
 const PITCH = {
-  minFreq: 130, maxFreq: 1400,   // ~trumpet range
+  minFreq: 41, maxFreq: 1400,    // E1 up; low end verified against synthetic tones
   minRms: 0.0015,                // hard floor only; the tracker's adaptive gate does the real work
   trimThreshold: 0.2,            // edge-trim amplitude for the correlation window
   minWindow: 64,                 // samples needed for a usable correlation
@@ -942,8 +945,11 @@ function renderTuner(freq) {
 }
 
 // ===== App state =====
+const DEBUG = location.hostname !== "apepeggios.com"
+  || new URLSearchParams(location.search).has("debug");
 const app = document.getElementById("app");
-const micDebug = document.getElementById("mic-debug");
+const micDebug = DEBUG ? document.getElementById("mic-debug") : null;
+if (!DEBUG) document.getElementById("mic-debug")?.remove();
 let scales, times, state, startTime, scaleStart, index;
 let skipped = 0;
 let lastSession = null;   // the session just finished, or null if nothing counted
