@@ -56,7 +56,7 @@
     padding: 2rem;
   }
   .stage { display: flex; flex-direction: column; align-items: center; gap: 2rem; text-align: center; max-width: 100%; }
-  .play-area { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; }
+  .play-area { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; margin-top: 1.5rem; }
   .scale {
     font-size: clamp(2.5rem, 8vw, 5.5rem);
     font-weight: 700;
@@ -68,10 +68,11 @@
   .scale.success { color: var(--good); }
   .mode-label {
     color: var(--muted);
-    font-size: 0.85rem;
-    letter-spacing: 0.15em;
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
-    margin-top: 0.4rem;
+    margin-top: 0.5rem;
   }
   .scale-title { display: flex; flex-direction: column; align-items: center; }
   .subtitle { font-size: clamp(1.5rem, 4vw, 2.5rem); color: var(--fg); font-weight: 500; }
@@ -120,7 +121,7 @@
     font-family: "Bravura Text", "Segoe UI Symbol", "Apple Symbols", serif;
     font-size: 2.4rem;
     line-height: 0.6;
-    transform: translate(-4px, 4px);
+    transform: translate(-1px, 2px);
   }
   .duration-radio button {
     background: transparent;
@@ -175,6 +176,11 @@
     color: #6db4ee;
     border-color: #6db4ee;
   }
+  .sequence .note.phase-up2 {
+    background: rgba(88, 216, 201, 0.18);
+    color: #58d8c9;
+    border-color: #58d8c9;
+  }
   .sequence .note.phase-down {
     background: rgba(141, 216, 141, 0.15);
     color: var(--good);
@@ -188,27 +194,23 @@
   .sequence .note.current {
     box-shadow: 0 0 0 2px var(--fg);
   }
-  .sequence.wrong .note {
-    border-color: var(--bad) !important;
-    color: var(--bad) !important;
-    background: rgba(255, 107, 107, 0.1) !important;
-  }
 
   .heard {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 90px;
+    height: 140px;
     width: 120px;
   }
-  .heard svg { width: 100%; height: 100%; }
-  .heard-circle { fill: transparent; stroke: var(--dim); stroke-width: 1.5; }
+  .heard svg { width: 100%; height: 100%; overflow: visible; }
   .heard-text {
     fill: var(--fg);
     font-size: 22px;
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
     font-variant-numeric: tabular-nums;
+    transition: fill 0.12s ease;
   }
+  .tuning-arc { stroke: var(--dim); stroke-width: 3; fill: none; stroke-linecap: round; }
 
   .btn-primary {
     background: var(--accent);
@@ -296,7 +298,7 @@ const arpeggioIntervals = {
   "Minor":         [0, 3, 7, 10],
   "Mixolydian":    [0, 4, 7, 10],
   "Dorian":        [0, 3, 7, 10],
-  "Blues":         [0, 4, 7, 10],
+  "Blues":         [0, 3, 7, 10],  // in-scale arp (min7); blues scale lacks the natural 3rd
   "MelodicMinor":  [0, 3, 7, 11],
   "HarmonicMinor": [0, 3, 7, 11],
 };
@@ -395,6 +397,37 @@ function noteName(pc, flats) {
   return (flats ? flatNames : sharpNames)[((pc % 12) + 12) % 12];
 }
 function letterOnly(name) { return name.replace(/[#♭]/g, ""); }
+
+const letterPCs = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+const letters = ["C", "D", "E", "F", "G", "A", "B"];
+function spelledName(letter, targetPc) {
+  const base = letterPCs[letter];
+  let diff = ((targetPc - base) % 12 + 12) % 12;
+  if (diff > 6) diff -= 12;
+  if (diff === 0) return letter;
+  if (diff === 1) return letter + "#";
+  if (diff === 2) return letter + "##";
+  if (diff === -1) return letter + "♭";
+  if (diff === -2) return letter + "♭♭";
+  return noteName(targetPc, false);
+}
+function scaleSpelling(scaleName) {
+  const [key, mode] = scaleName.split(" ");
+  const intervals = modeIntervals[mode];
+  const root = rootPC[key];
+  if (intervals.length !== 7) {
+    // 6-note blues: fall back to flat/sharp preference
+    const flats = useFlats(scaleName);
+    return intervals.map(iv => noteName((root + iv) % 12, flats));
+  }
+  const rootLetter = key[0];
+  const rootIdx = letters.indexOf(rootLetter);
+  return intervals.map((iv, i) => {
+    const targetPc = (root + iv) % 12;
+    const letter = letters[(rootIdx + i) % 7];
+    return spelledName(letter, targetPc);
+  });
+}
 const chordSuffix = {
   "Major": "maj7", "Minor": "min7", "Mixolydian": "7", "Dorian": "min7", "Blues": "7",
   "MelodicMinor": "minMaj7", "HarmonicMinor": "minMaj7",
@@ -414,31 +447,91 @@ function expectedSequence(scaleName, transposeSemi = 0) {
   const root = rootPC[key];
   const scale = modeIntervals[mode].map(i => (i + root) % 12);
   const arp = arpeggioIntervals[mode].map(i => (i + root) % 12);
+  const names = scaleSpelling(scaleName);
   const slotOfPc = {};
   scale.forEach((pc, i) => { slotOfPc[pc] = i; });
   const octaveSlot = scale.length;
   const displayPcs = [...scale, root];
-  const up = [...scale, root];
-  const down = [...scale].reverse();
-  const arpUp = arp.slice(1);                  // 3-5-7
-  const arpDown = arp.slice(0, -1).reverse();  // 5-3-root
-  const writtenPcs = [...up, ...down, ...arpUp, ...arpDown];
-  const slotsUp = [...scale.map((_, i) => i), octaveSlot];
-  const slotsDown = scale.map((_, i) => scale.length - 1 - i);
-  const slots = [...slotsUp, ...slotsDown,
-                 ...arpUp.map(pc => slotOfPc[pc]),
-                 ...arpDown.map(pc => slotOfPc[pc])];
+  const displayNames = [...names, names[0]];
+  const writtenByPc = {};
+  scale.forEach((pc, i) => { writtenByPc[pc] = names[i]; });
+
   const toConcert = pc => ((pc + transposeSemi) % 12 + 12) % 12;
-  const pcs = writtenPcs.map(toConcert);
-  const upEnd = up.length;
-  const downEnd = upEnd + down.length;
-  return { pcs, upEnd, downEnd, displayPcs, slots, bars: new Set() };
+
+  // Segments
+  const up1Pcs = [...scale, root];                                          // root..7, octave
+  const up1Slots = [...scale.map((_, i) => i), octaveSlot];
+  const down1Pcs = [...scale].reverse();                                    // 7..root
+  const down1Slots = scale.map((_, i) => scale.length - 1 - i);
+  const up2Pcs = [...scale.slice(1), root];                                 // 9th..15th (2..7 + top)
+  const up2Slots = [...scale.slice(1).map((_, i) => i + 1), octaveSlot];
+  const down2Pcs = [...scale].reverse();                                    // same pcs as down1
+  const down2Slots = scale.map((_, i) => scale.length - 1 - i);
+  // 1-octave arp: 3-5-7-5-3-1 (drop leading root & top)
+  const arpUp = arp.slice(1);
+  const arpDown = arp.slice(0, -1).reverse();
+  const arpFullPcs = [...arpUp, ...arpDown];
+  const arpFullSlots = arpFullPcs.map(pc => slotOfPc[pc]);
+
+  // 2-octave arp: 3-5-7-8-10-12-14-15-14-12-10-8-7-5-3-1 (16 notes; leading root dropped)
+  const chordUpPcs = [arp[1], arp[2], arp[3]];    // 3, 5, 7
+  const chordDownPcs = [arp[3], arp[2], arp[1]];  // 7, 5, 3
+  const arp2FullPcs = [
+    ...chordUpPcs, arp[0],   // 3 5 7 8
+    ...chordUpPcs, arp[0],   // 10 12 14 15
+    ...chordDownPcs, arp[0], // 14 12 10 8
+    ...chordDownPcs, arp[0], // 7 5 3 1
+  ];
+  const chordUpSlots = chordUpPcs.map(pc => slotOfPc[pc]);
+  const chordDownSlots = chordDownPcs.map(pc => slotOfPc[pc]);
+  const arp2FullSlots = [
+    ...chordUpSlots, octaveSlot,
+    ...chordUpSlots, octaveSlot,
+    ...chordDownSlots, octaveSlot,
+    ...chordDownSlots, 0,
+  ];
+
+  const up1Phase = up1Pcs.map(() => "up");
+  const down1Phase = down1Pcs.map(() => "down");
+  const up2Phase = up2Pcs.map(() => "up2");
+  const down2Phase = down2Pcs.map(() => "down");
+  const arpPhase = arpFullPcs.map(() => "arp");
+  const arp2Phase = arp2FullPcs.map(() => "arp");
+
+  const single = {
+    pcs: [...up1Pcs, ...down1Pcs, ...arpFullPcs].map(toConcert),
+    slots: [...up1Slots, ...down1Slots, ...arpFullSlots],
+    phases: [...up1Phase, ...down1Phase, ...arpPhase],
+    upEnd: up1Pcs.length,
+    downEnd: up1Pcs.length + down1Pcs.length,
+  };
+  const double = {
+    pcs: [...up1Pcs, ...up2Pcs, ...down2Pcs, ...down1Pcs, ...arp2FullPcs].map(toConcert),
+    slots: [...up1Slots, ...up2Slots, ...down2Slots, ...down1Slots, ...arp2FullSlots],
+    phases: [...up1Phase, ...up2Phase, ...down2Phase, ...down1Phase, ...arp2Phase],
+    upEnd: up1Pcs.length + up2Pcs.length,
+    downEnd: up1Pcs.length + up2Pcs.length + down2Pcs.length + down1Pcs.length,
+  };
+  // The top of the 1st octave is the start of the 2nd octave when we've committed to double.
+  double.phases[up1Pcs.length - 1] = "up2";
+
+  return {
+    single, double,
+    branchIdx: up1Pcs.length,     // 8 for 7-note modes, 7 for blues
+    displayPcs, displayNames, writtenByPc,
+    bars: new Set(),
+  };
 }
 
-function phaseAt(idx, exp) {
-  if (idx < exp.upEnd) return "up";
-  if (idx < exp.downEnd) return "down";
-  return "arp";
+function getPhaseAt(i, matchIdx, path) {
+  const p = path.phases[i];
+  // Peak of an "up" phase becomes "down" once the note AFTER it has also been played
+  // (i.e., we've confirmed the turnaround). Delay by one match so the branch point
+  // can commit to double-octave (turquoise) instead of prematurely flashing green.
+  if ((p === "up" || p === "up2") && matchIdx > i + 1 && path.phases[i + 1] === "down") {
+    return "down";
+  }
+  return p;
 }
 
 // ===== Pitch detection (autocorrelation) =====
@@ -492,8 +585,9 @@ function freqToCents(freq) {
 
 // ===== Note tracker: emits a note event on each stable pitch onset =====
 class NoteTracker {
-  constructor(onNote) {
+  constructor(onNote, onSilence) {
     this.onNote = onNote;
+    this.onSilence = onSilence || (() => {});
     this.reset();
     this.STABILITY = 2;
     this.RMS_ON = 0.012;
@@ -508,6 +602,7 @@ class NoteTracker {
   process(rms, freq, time) {
     if (this.state === "playing" && rms < this.RMS_OFF) {
       this.state = "silent"; this.currentPC = -1; this.candPC = -1; this.candCount = 0;
+      this.onSilence();
       return;
     }
     if (this.state === "silent" && rms < this.RMS_ON) return;
@@ -543,25 +638,40 @@ class Matcher {
     this.matchIdx = 0;
     this.times = [];
     this.cents = [];
+    this.path = null;  // "single" or "double"; decided at branchIdx
     this.onProgress = onProgress;
     this.onSuccess = onSuccess;
     this.onWrong = onWrong;
   }
+  currentPath() {
+    return this.expected[this.path || "single"];
+  }
   input(pc, time, cents = 0) {
-    if (pc === this.expected.pcs[this.matchIdx]) {
+    cancelRewind();
+    // At the branch point, choose single or double based on what the player hits.
+    if (this.path === null && this.matchIdx === this.expected.branchIdx) {
+      if (pc === this.expected.single.pcs[this.matchIdx]) this.path = "single";
+      else if (pc === this.expected.double.pcs[this.matchIdx]) this.path = "double";
+    }
+    const path = this.currentPath();
+    if (pc === path.pcs[this.matchIdx]) {
       this.times.push(time);
       this.cents.push(cents);
       this.matchIdx++;
       this.onProgress(this.matchIdx);
-      if (this.matchIdx === this.expected.pcs.length) {
+      if (this.matchIdx === path.pcs.length) {
         this.onSuccess(this.times, timingCV(this.times, [...this.expected.bars]));
       }
-    } else {
-      this.onWrong();
-      this.matchIdx = 0;
-      this.times = [];
-      this.cents = [];
+      return;
     }
+    // Backward search on the committed (or default single) path.
+    for (let k = this.matchIdx - 1; k >= 0; k--) {
+      if (path.pcs[k] === pc) {
+        scheduleRewind(pc, k + 1, time, cents);
+        return;
+      }
+    }
+    this.onWrong();
   }
 }
 
@@ -584,6 +694,13 @@ const TIMING_CV_MAX = 1.2;  // lenient (higher = more forgiving)
 let audioCtx = null, analyser = null, mediaStream = null, audioBuf = null;
 let noteTracker = null;
 let smoothedCents = 0;
+let pendingStartTimer = null;
+let pendingStartPc = null;
+const START_HOLD_MS = 500;
+let pendingRewindTimer = null;
+let pendingRewindPc = null;
+let pendingRewindTo = null;
+const REWIND_HOLD_MS = 500;
 
 async function initMic(silent = false) {
   try {
@@ -632,13 +749,28 @@ function detectLoop() {
   if (heardEl && active && scales[index]) {
     const flats = useFlats(scales[index]);
     const textEl = heardEl.querySelector(".heard-text");
-    if (freq > 0 && textEl) {
+    const arcEl = heardEl.querySelector(".tuning-arc");
+    // Only display once noteTracker has confirmed a stable pitch (filters noise transients).
+    const stable = noteTracker && noteTracker.state === "playing" && noteTracker.currentPC >= 0;
+    if (stable && freq > 0 && textEl) {
       const concertPc = freqToPC(freq);
       const t = transpositions[transposition] || 0;
       const writtenPc = ((concertPc - t) % 12 + 12) % 12;
-      textEl.textContent = noteName(writtenPc, flats);
+      const map = currentExpected?.writtenByPc || {};
+      textEl.textContent = map[writtenPc] || noteName(writtenPc, flats);
+      const cents = freqToCents(freq);
+      smoothedCents = smoothedCents * 0.72 + cents * 0.28;
+      const color = centsToColor(smoothedCents);
+      textEl.style.fill = color;
+      if (arcEl) {
+        arcEl.setAttribute("d", tuningArcPath(smoothedCents));
+        arcEl.style.stroke = color;
+      }
     } else if (textEl) {
       textEl.textContent = "—";
+      textEl.style.fill = "";
+      smoothedCents = 0;
+      if (arcEl) { arcEl.setAttribute("d", "M 12 70 Q 60 70 108 70"); arcEl.style.stroke = ""; }
     }
   }
   requestAnimationFrame(detectLoop);
@@ -709,16 +841,20 @@ function playAreaHTML(scaleName) {
   if (!scaleName) return `<div class="subtitle">no modes on</div>`;
   const exp = expectedSequence(scaleName, transpositions[transposition] || 0);
   currentExpected = exp;
-  const flats = useFlats(scaleName);
-  const seqHTML = exp.displayPcs.map((pc, i) => {
-    const full = noteName(pc, flats);
-    return `<span class="note" data-slot="${i}" data-full="${full}">${letterOnly(full)}</span>`;
-  }).join("");
+  const seqHTML = exp.displayNames.map((name, i) =>
+    `<span class="note" data-slot="${i}" data-full="${name}">${letterOnly(name)}</span>`
+  ).join("");
   const heardHTML = audioCtx ? `
     <div class="heard" id="heard">
-      <svg viewBox="0 0 120 90" xmlns="http://www.w3.org/2000/svg">
-        <circle class="heard-circle" cx="60" cy="45" r="26"/>
-        <text class="heard-text" x="60" y="53" text-anchor="middle">—</text>
+      <svg viewBox="0 0 120 140" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <mask id="letter-mask">
+            <rect fill="white" width="120" height="140"/>
+            <circle fill="black" cx="60" cy="70" r="22"/>
+          </mask>
+        </defs>
+        <path class="tuning-arc" d="M 12 70 Q 60 70 108 70" mask="url(#letter-mask)"/>
+        <text class="heard-text" x="60" y="78" text-anchor="middle">—</text>
       </svg>
     </div>
   ` : "";
@@ -827,15 +963,77 @@ function refreshPlayArea() {
 function setupMatcher() {
   if (!audioCtx || !noteTracker || !currentExpected) { currentMatcher = null; return; }
   noteTracker.reset();
+  cancelStart();
   currentMatcher = new Matcher(
     currentExpected,
     (idx) => {
       updateSequenceUI(idx);
-      if (state === "ready" && idx === 1) beginPlaying();
+      if (state === "ready" && idx === 1) scheduleStart(currentExpected.single.pcs[0]);
     },
     (t, cv) => onSequenceComplete(cv),
-    () => flashWrong(),
+    () => { cancelStart(); flashWrong(); },
   );
+}
+
+function scheduleStart(pc) {
+  cancelStart();
+  pendingStartPc = pc;
+  pendingStartTimer = setTimeout(() => {
+    pendingStartTimer = null;
+    if (noteTracker && noteTracker.state === "playing" && noteTracker.currentPC === pendingStartPc) {
+      beginPlaying();
+    } else {
+      resetProgress();
+    }
+    pendingStartPc = null;
+  }, START_HOLD_MS);
+}
+
+function cancelStart() {
+  if (pendingStartTimer !== null) {
+    clearTimeout(pendingStartTimer);
+    pendingStartTimer = null;
+    pendingStartPc = null;
+    resetProgress();
+  }
+}
+
+function resetProgress() {
+  if (!currentMatcher) return;
+  currentMatcher.matchIdx = 0;
+  currentMatcher.times = [];
+  currentMatcher.cents = [];
+  currentMatcher.path = null;
+  updateSequenceUI(0);
+}
+
+function scheduleRewind(pc, rewindTo, time, cents) {
+  cancelRewind();
+  pendingRewindPc = pc;
+  pendingRewindTo = rewindTo;
+  pendingRewindTimer = setTimeout(() => {
+    pendingRewindTimer = null;
+    if (currentMatcher && noteTracker && noteTracker.state === "playing"
+        && noteTracker.currentPC === pendingRewindPc) {
+      currentMatcher.times.length = pendingRewindTo;
+      currentMatcher.cents.length = pendingRewindTo;
+      currentMatcher.times[pendingRewindTo - 1] = time;
+      currentMatcher.cents[pendingRewindTo - 1] = cents;
+      currentMatcher.matchIdx = pendingRewindTo;
+      updateSequenceUI(pendingRewindTo);
+    }
+    pendingRewindPc = null;
+    pendingRewindTo = null;
+  }, REWIND_HOLD_MS);
+}
+
+function cancelRewind() {
+  if (pendingRewindTimer !== null) {
+    clearTimeout(pendingRewindTimer);
+    pendingRewindTimer = null;
+    pendingRewindPc = null;
+    pendingRewindTo = null;
+  }
 }
 
 function beginPlaying() {
@@ -880,45 +1078,41 @@ function renderPlaying() {
 }
 
 function tuningArcPath(cents) {
-  // Fixed-size SVG (viewBox 0 0 120 140, circle centered at 60,70 r=26).
-  // Sharp → arc above circle, curving upward. Flat → arc below, curving downward.
-  if (Math.abs(cents) < 4) return "";
+  // Single horizontal arc from x=12 to x=108, bending around the letter (masked at r=22).
+  // Sharp → bends upward (control point above baseline). Flat → bends downward.
   const c = Math.max(-40, Math.min(40, cents));
-  const sharp = c > 0;
-  const dist = 30 + Math.abs(c) / 40 * 16;   // 30..46 from circle center
-  const arcY = sharp ? 70 - dist : 70 + dist;
-  const controlY = sharp ? arcY - 8 : arcY + 8;
-  return `M ${60 - 26} ${arcY} Q 60 ${controlY} ${60 + 26} ${arcY}`;
+  const controlY = 70 - c * 2.0;  // c=±40 → control at 70∓80
+  return `M 12 70 Q 60 ${controlY.toFixed(1)} 108 70`;
+}
+function centsToColor(cents) {
+  // Green (in-tune) → red (out-of-tune), interpolating through yellow.
+  const abs = Math.min(Math.abs(cents), 30);
+  const t = abs / 30;
+  const r = Math.round(141 + (255 - 141) * t);
+  const g = Math.round(216 + (107 - 216) * t);
+  const b = Math.round(141 + (107 - 141) * t);
+  return `rgb(${r},${g},${b})`;
 }
 
-function centsToFilter(cents) {
-  // Flat → darker (brightness < 1). Sharp → whiter (brightness > 1, less saturated).
-  const c = Math.max(-50, Math.min(50, cents));
-  if (c < 0) return `brightness(${(1 + c / 60).toFixed(2)})`;
-  if (c > 0) return `brightness(${(1 + c / 100).toFixed(2)}) saturate(${(1 - c / 70).toFixed(2)})`;
-  return "";
-}
 function updateSequenceUI(matchIdx) {
   const exp = currentExpected;
   if (!exp) return;
+  const pathName = currentMatcher?.path || "single";
+  const path = exp[pathName];
   document.querySelectorAll(".sequence .note").forEach(n => {
-    n.classList.remove("phase-up", "phase-down", "phase-arp", "current");
-    n.style.filter = "";
+    n.classList.remove("phase-up", "phase-up2", "phase-down", "phase-arp", "current");
   });
-  const centsArr = currentMatcher?.cents || [];
   for (let i = 0; i < matchIdx; i++) {
-    const slot = exp.slots[i];
+    const slot = path.slots[i];
     if (slot === undefined) continue;
     const el = document.querySelector(`.sequence .note[data-slot="${slot}"]`);
     if (!el) continue;
-    const phase = phaseAt(i, exp);
+    const phase = getPhaseAt(i, matchIdx, path);
     el.classList.add(`phase-${phase}`);
     if (el.dataset.full) el.textContent = el.dataset.full;
-    const c = centsArr[i];
-    if (checkIntonation && typeof c === "number") el.style.filter = centsToFilter(c);
   }
-  if (matchIdx < exp.pcs.length) {
-    const slot = exp.slots[matchIdx];
+  if (matchIdx < path.pcs.length) {
+    const slot = path.slots[matchIdx];
     if (slot !== undefined) {
       const el = document.querySelector(`.sequence .note[data-slot="${slot}"]`);
       if (el) el.classList.add("current");
@@ -933,7 +1127,6 @@ function flashWrong() {
   seq.classList.add("wrong");
   clearTimeout(wrongTimer);
   wrongTimer = setTimeout(() => seq.classList.remove("wrong"), 250);
-  updateSequenceUI(0);
 }
 
 function onSequenceComplete(cv) {
@@ -1065,9 +1258,17 @@ document.addEventListener("keydown", (e) => {
   document.addEventListener(evt, resumeAudioIfNeeded, { passive: true })
 );
 
-noteTracker = new NoteTracker((pc, time, cents) => {
-  if (currentMatcher) currentMatcher.input(pc, time, cents);
-});
+noteTracker = new NoteTracker(
+  (pc, time, cents) => {
+    // If awaiting a sustained first note and the player attacks a new note, abort.
+    if (state === "ready" && pendingStartTimer) cancelStart();
+    if (currentMatcher) currentMatcher.input(pc, time, cents);
+  },
+  () => {
+    if (state === "ready" && pendingStartTimer) cancelStart();
+    if (state === "playing") cancelRewind();
+  }
+);
 
 start();
 
