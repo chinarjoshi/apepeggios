@@ -287,6 +287,35 @@
     .mic-warn { animation: none; }
   }
 
+  /* Roomier screens: the phone-tuned sizes read tiny on a large display. */
+  @media (min-width: 621px) {
+    .mode-label { font-size: 1.3rem; letter-spacing: 0.2em; }
+    .scale-title { gap: 0.55rem; }
+    .scale-title .scale { margin-bottom: 1rem; }
+    .play-area { gap: 2rem; }
+    .sequence { gap: 0.5rem; }
+    .sequence .note {
+      min-width: 3.4rem;
+      min-height: 2.6rem;
+      padding: 0.5rem 0.8rem;
+      font-size: 1.25rem;
+      border-radius: 6px;
+    }
+    .heard { width: 168px; height: 196px; }
+    .heard-text { font-size: 30px; }
+    .stats { font-size: 1.2rem; gap: 3.5rem; }
+    .hint { font-size: 1rem; }
+    .option-bar { padding: 0.4rem 0.7rem; border-radius: 6px; }
+    .option-bar button { font-size: 0.85rem; padding: 0.15rem 0.6rem; }
+    .option-icon svg { width: 19px; height: 19px; }
+    .option-icon.icon-sun svg, .option-icon.icon-moon svg { width: 18px; height: 18px; }
+    .option-icon.icon-clef { font-size: 2.2rem; }
+    .swap > .layer { gap: 1.1rem; }
+    .widget-row { gap: 0.7rem; }
+    .summary div strong { font-size: 1.6rem; }
+    .list { font-size: 1rem; }
+  }
+
   /* Narrow screens: let the 8 note pills shrink to share one row. */
   @media (max-width: 620px) {
     body { padding: 1rem 0.5rem; align-items: stretch; overflow-y: auto; }
@@ -320,6 +349,9 @@
       flex-wrap: nowrap;
       gap: 0.25rem;
       width: 100%;
+      /* Taller pills crowd the pattern label above, so add the room here
+         rather than letting the row creep upward. */
+      margin-top: 0.6rem;
     }
     .sequence .note {
       flex: 1 1 0;
@@ -607,7 +639,10 @@ const patterns = {
     single: ctx => compose([scaleUpSeg(ctx), scaleDownSeg(ctx), arp1Seg(ctx)]),
     double: ctx => {
       const p = compose([scaleUpSeg(ctx), scaleUp2Seg(ctx), scaleDown2Seg(ctx), scaleDownSeg(ctx), arp2Seg(ctx)]);
-      p.phases[ctx.scale.length] = "up2";   // octave = start of 2nd octave (turquoise)
+      // Both the root and the octave belong to the two-octave ascent, so they
+      // turn turquoise with the rest of it once the path is committed.
+      p.phases[0] = "up2";
+      p.phases[ctx.scale.length] = "up2";
       return p;
     },
     branchIdx: ctx => ctx.scale.length + 1,
@@ -710,6 +745,10 @@ const TRACKER = {
   floorRise: 0.002,  // ...and upward slowly, so it converges on true ambient
 };
 
+// A laptop mic sits further away and hears more of the room than a phone
+// held close, so it needs a higher bar to avoid triggering on noise.
+const GATE_BOOST = window.matchMedia("(hover: hover)").matches ? 1.8 : 1;
+
 class NoteTracker {
   constructor(onNote, onSilence) {
     this.onNote = onNote;
@@ -725,8 +764,9 @@ class NoteTracker {
     this.candCount = 0;
   }
   get rmsOn() {
-    const scaled = (this.noiseFloor ?? 0) * TRACKER.onRatio;
-    return Math.min(TRACKER.maxOn, Math.max(TRACKER.minOn, scaled));
+    const scaled = (this.noiseFloor ?? 0) * TRACKER.onRatio * GATE_BOOST;
+    return Math.min(TRACKER.maxOn * GATE_BOOST,
+                    Math.max(TRACKER.minOn * GATE_BOOST, scaled));
   }
   process(rms, freq) {
     // Only sample the ambient floor between notes; fall fast, rise slow.
@@ -983,7 +1023,8 @@ function resetSession() {
 
 // Size to the widest name the app can ever produce, not just the ones in this
 // session, so toggling a mode never resizes the display mid-use.
-const CHORD_MAX_PX = 88;   // desktop cap; short names never exceed it
+const CHORD_MAX_PX = 88;    // phones
+const CHORD_MAX_PX_WIDE = 124;  // roomier screens
 const CHORD_FONT = '700 %dpx ui-monospace, "SF Mono", Menlo, monospace';
 const LONGEST_CHORD = Object.keys(keySharpsMajor)
   .flatMap(key => MODES.flatMap(m => NOTATIONS.map(n => key + m.chord[n])))
@@ -993,10 +1034,11 @@ let measureCtx = null;
 function fitChordSize() {
   const longest = LONGEST_CHORD;
   measureCtx ??= document.createElement("canvas").getContext("2d");
-  measureCtx.font = CHORD_FONT.replace("%d", CHORD_MAX_PX);
-  const needed = measureCtx.measureText(longest).width;
   const avail = document.documentElement.clientWidth - 24;
-  const px = needed > avail ? Math.floor(CHORD_MAX_PX * avail / needed) : CHORD_MAX_PX;
+  const cap = avail > 620 ? CHORD_MAX_PX_WIDE : CHORD_MAX_PX;
+  measureCtx.font = CHORD_FONT.replace("%d", cap);
+  const needed = measureCtx.measureText(longest).width;
+  const px = needed > avail ? Math.floor(cap * avail / needed) : cap;
   document.documentElement.style.setProperty("--scale-size", px + "px");
 }
 
