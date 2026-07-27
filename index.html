@@ -24,14 +24,14 @@
     left: 1.5rem;
     display: flex;
     align-items: center;
-    gap: 0.7rem;
-    color: var(--accent);
+    gap: 0.1rem;
     font-family: "Lexend Deca", system-ui, -apple-system, sans-serif;
     font-size: 1.75rem;
     font-weight: 500;
     letter-spacing: -0.01em;
     z-index: 10;
     user-select: none;
+    text-decoration: none;
   }
   .brand .trumpet {
     display: inline-block;
@@ -42,6 +42,9 @@
     mask: url("trumpet.png") center/contain no-repeat;
     transform: scaleX(-1);
   }
+  .brand .wordmark { margin-left: -0.4rem; }
+  .brand .ape { color: var(--accent); }
+  .brand .peggios { color: var(--muted); }
   html, body { height: 100%; }
   body {
     background: var(--bg);
@@ -77,12 +80,8 @@
   .stats strong { color: var(--fg); font-weight: 500; }
   .ready-meta { display: flex; gap: 2rem; color: var(--muted); font-size: 0.95rem; font-variant-numeric: tabular-nums; flex-wrap: wrap; justify-content: center; }
   .ready-meta span strong { color: var(--accent); font-weight: 500; }
-  .weights { display: flex; flex-direction: column; gap: 0.5rem; width: 26rem; max-width: 100%; }
-  .weight-row { display: grid; grid-template-columns: 8rem 1fr 3rem; align-items: center; gap: 0.75rem; font-size: 0.85rem; color: var(--muted); }
-  .weight-row .mode-name { text-align: left; }
-  .weight-row .pct { text-align: right; font-variant-numeric: tabular-nums; color: var(--fg); }
-  .weight-row input[type=range] { width: 100%; accent-color: var(--accent); }
-  .weight-row.off .mode-name, .weight-row.off .pct { color: var(--dim); }
+  .widgets { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; }
+  .mode-toggles { flex-wrap: wrap; justify-content: center; max-width: 40rem; }
   .btn-reset {
     background: transparent;
     color: var(--muted);
@@ -225,7 +224,7 @@
 <body>
 <a class="brand" href="/" aria-label="apepeggios">
   <span class="trumpet" aria-hidden="true"></span>
-  <span>apepeggios</span>
+  <span class="wordmark"><span class="ape">ape</span><span class="peggios">peggios</span></span>
 </a>
 <div id="app"></div>
 <footer>
@@ -282,13 +281,21 @@ const defaultTransposition = "B♭";
 function loadTransposition() { return localStorage.getItem(TRANSPOSITION_KEY) || defaultTransposition; }
 function saveTransposition(t) { localStorage.setItem(TRANSPOSITION_KEY, t); }
 const defaultWeights = {
-  "Major": 20, "Minor": 20, "Mixolydian": 20, "Dorian": 20, "Blues": 20,
+  "Major": 1, "Minor": 1, "Mixolydian": 1, "Dorian": 1, "Blues": 1,
   "MelodicMinor": 0, "HarmonicMinor": 0,
 };
+const allModes = ["Major", "Minor", "Dorian", "Mixolydian", "Blues", "MelodicMinor", "HarmonicMinor"];
 const defaultDuration = "unlimited";
 const durationOptions = ["10", "20", "30", "unlimited"];  // minutes
 function loadDuration() { return localStorage.getItem(DURATION_KEY) || defaultDuration; }
 function saveDuration(d) { localStorage.setItem(DURATION_KEY, d); }
+
+const ARPEGGIO_KEY = "scales-arpeggio-v1";
+function loadArpeggio() {
+  const v = localStorage.getItem(ARPEGGIO_KEY);
+  return v === null ? true : v === "true";
+}
+function saveArpeggio(b) { localStorage.setItem(ARPEGGIO_KEY, b ? "true" : "false"); }
 
 function loadWeights() {
   try {
@@ -298,43 +305,6 @@ function loadWeights() {
   } catch { return { ...defaultWeights }; }
 }
 function saveWeightsToStorage(w) { localStorage.setItem(WEIGHTS_KEY, JSON.stringify(w)); }
-
-// Auto-balance: adjust one weight and rebalance others so sum stays at 100.
-// Decreasing → freed amount split equally among currently-on others (off modes stay off).
-// Increasing → taken from others proportionally.
-function setWeight(w, mode, newVal) {
-  newVal = Math.max(0, Math.min(100, Math.round(newVal)));
-  const oldVal = w[mode];
-  if (newVal === oldVal) return;
-  const delta = newVal - oldVal;
-  const others = Object.keys(w).filter(m => m !== mode);
-
-  if (delta < 0) {
-    const toAdd = -delta;
-    const nonZero = others.filter(m => w[m] > 0);
-    const targets = nonZero.length > 0 ? nonZero : others;
-    if (targets.length > 0) {
-      const each = Math.floor(toAdd / targets.length);
-      let leftover = toAdd - each * targets.length;
-      for (const m of targets) {
-        w[m] += each + (leftover > 0 ? 1 : 0);
-        if (leftover > 0) leftover--;
-      }
-    }
-  } else {
-    const oldOtherSum = others.reduce((s, m) => s + w[m], 0);
-    const targetOther = 100 - newVal;
-    if (oldOtherSum > 0) {
-      const raw = others.map(m => (w[m] / oldOtherSum) * targetOther);
-      const floored = raw.map(Math.floor);
-      let leftover = targetOther - floored.reduce((a, b) => a + b, 0);
-      const fracs = raw.map((r, i) => ({ i, f: r - floored[i] })).sort((a, b) => b.f - a.f);
-      for (let k = 0; k < leftover && k < fracs.length; k++) floored[fracs[k].i]++;
-      others.forEach((m, i) => w[m] = floored[i]);
-    }
-  }
-  w[mode] = newVal;
-}
 
 function activePools(w) {
   const pools = {};
@@ -402,17 +372,19 @@ function chordName(scaleName) {
 }
 function modeOf(scaleName) { return scaleName.split(" ")[1]; }
 function displayMode(mode) { return mode.replace(/([a-z])([A-Z])/g, "$1 $2"); }
-function expectedSequence(scaleName, transposeSemi = 0) {
+function expectedSequence(scaleName, transposeSemi = 0, withArpeggio = true) {
   const [key, mode] = scaleName.split(" ");
   const root = rootPC[key];
   const scale = modeIntervals[mode].map(i => (i + root) % 12);
   const arp = arpeggioIntervals[mode].map(i => (i + root) % 12);
   const up = [...scale, root];                 // ascending, incl. top octave
   const down = [...scale].reverse();           // descending, ending on root
-  const arpUp = arp.slice(1);                  // 3-5-7 (drop leading root)
-  const arpDown = arp.slice(0, -1).reverse();  // 5-3-root
-  const arpFull = [...arpUp, ...arpDown];      // 3-5-7-5-3-1
-  const writtenPcs = [...up, ...down, ...arpFull];
+  let writtenPcs = [...up, ...down];
+  if (withArpeggio) {
+    const arpUp = arp.slice(1);                  // 3-5-7 (drop leading root)
+    const arpDown = arp.slice(0, -1).reverse();  // 5-3-root
+    writtenPcs = [...writtenPcs, ...arpUp, ...arpDown];
+  }
   const toConcert = pc => ((pc + transposeSemi) % 12 + 12) % 12;
   const pcs = writtenPcs.map(toConcert);       // what the mic hears (concert)
   const upEnd = up.length;
@@ -611,6 +583,7 @@ let currentExpected = null, currentMatcher = null;
 let weights = loadWeights();
 let duration = loadDuration();
 let transposition = loadTransposition();
+let includeArpeggio = loadArpeggio();
 let targetMs = null;  // null = unlimited
 
 function shuffle(a) {
@@ -665,15 +638,28 @@ function render() {
   renderPlaying();
 }
 
-function subtitleText() {
-  const anyActive = Object.values(weights).some(v => v > 0);
-  if (!anyActive) return "no modes on";
-  if (duration === "unlimited") return `${buildUnlimitedList(weights).length} scales`;
-  return `${duration} min`;
+function playAreaHTML(scaleName) {
+  if (!scaleName) return `<div class="subtitle">no modes on</div>`;
+  const exp = expectedSequence(scaleName, transpositions[transposition] || 0, includeArpeggio);
+  currentExpected = exp;
+  const flats = useFlats(scaleName);
+  const seqHTML = exp.uniquePcs.map((pc, i) => {
+    const full = noteName(pc, flats);
+    return `<span class="note" data-slot="${i}" data-full="${full}">${letterOnly(full)}</span>`;
+  }).join("");
+  return `
+    <div class="scale-title">
+      <div class="scale">${chordName(scaleName)}</div>
+      <div class="mode-label">${displayMode(modeOf(scaleName))}</div>
+    </div>
+    <div class="sequence" id="sequence">${seqHTML}</div>
+    <div class="heard" id="heard">${audioCtx ? "heard <strong>—</strong>" : ""}</div>
+  `;
 }
 
 function renderReady() {
   const h = loadHistory();
+  const scaleName = scales[index];
   let meta = "";
   if (h.length > 0) {
     const best = h.reduce((b, s) => s.total_ms < b.total_ms ? s : b);
@@ -684,36 +670,48 @@ function renderReady() {
       <span>last <strong>${fmt(last.total_ms)}</strong></span>
     </div>`;
   }
-  const rows = Object.keys(defaultWeights).map(m => {
-    const cls = weights[m] === 0 ? "off" : "";
-    return `<div class="weight-row ${cls}" data-row="${m}">
-      <span class="mode-name">${displayMode(m)}</span>
-      <input type="range" min="0" max="100" step="1" value="${weights[m]}" data-mode="${m}">
-      <span class="pct" data-mode="${m}">${weights[m]}%</span>
-    </div>`;
-  }).join("");
-  const canStart = Object.values(weights).some(v => v > 0);
+  const durationButtons = durationOptions.map(d =>
+    `<button class="${d === duration ? "selected" : ""}" data-dur="${d}">${d === "unlimited" ? "∞" : d}</button>`).join("");
+  const transposeButtons = Object.keys(transpositions).map(t =>
+    `<button class="${t === transposition ? "selected" : ""}" data-trans="${t}">${t}</button>`).join("");
+  const modeButtons = allModes.map(m =>
+    `<button class="${weights[m] > 0 ? "selected" : ""}" data-mode-toggle="${m}">${displayMode(m)}</button>`).join("");
+  const arpButton = `<button class="${includeArpeggio ? "selected" : ""}" data-arp-toggle>arpeggio</button>`;
+
   app.innerHTML = `
     <div class="stage">
-      <div class="subtitle" id="session-count">${subtitleText()}</div>
-      ${meta}
-      <div class="duration-radio" id="duration-radio">
-        ${durationOptions.map(d => `<button class="${d === duration ? "selected" : ""}" data-dur="${d}">${d === "unlimited" ? "∞" : d}</button>`).join("")}
+      <div class="widgets widgets-top">
+        ${meta}
+        <div class="duration-radio" id="duration-radio">${durationButtons}</div>
+        <div class="duration-radio" id="transpose-radio">${transposeButtons}</div>
       </div>
-      <div class="duration-radio" id="transpose-radio">
-        ${Object.keys(transpositions).map(t => `<button class="${t === transposition ? "selected" : ""}" data-trans="${t}">${t}</button>`).join("")}
+      <div class="play-area">${playAreaHTML(scaleName)}</div>
+      <div class="widgets widgets-bottom">
+        <div class="duration-radio mode-toggles" id="mode-toggles">${modeButtons}</div>
+        <div class="duration-radio" id="arp-toggle">${arpButton}</div>
+        <button class="btn-reset" id="btn-reset">reset to defaults</button>
+        ${!audioCtx ? `<button class="btn-mic-inline" id="btn-enable-mic">enable microphone for auto-advance</button>` : ""}
       </div>
-      <div class="weights">${rows}</div>
-      <button class="btn-reset" id="btn-reset">reset to defaults</button>
-      ${!audioCtx ? `<button class="btn-mic-inline" id="btn-enable-mic">enable microphone for auto-advance</button>` : ""}
-      <div class="hint">${canStart ? "press <strong>space</strong> to start" : "turn on at least one mode to start"}</div>
     </div>
   `;
-  document.getElementById("btn-reset").addEventListener("click", () => {
+
+  if (scaleName) {
+    updateSequenceUI(0);
+    setupMatcher();
+  } else {
+    currentMatcher = null;
+  }
+  attachReadyHandlers();
+}
+
+function attachReadyHandlers() {
+  document.getElementById("btn-reset")?.addEventListener("click", () => {
     weights = { ...defaultWeights };
     duration = defaultDuration;
+    includeArpeggio = true;
     saveWeightsToStorage(weights);
     saveDuration(duration);
+    saveArpeggio(includeArpeggio);
     start();
   });
   document.querySelectorAll("#duration-radio button").forEach(btn => {
@@ -722,8 +720,7 @@ function renderReady() {
       saveDuration(duration);
       document.querySelectorAll("#duration-radio button").forEach(b => b.classList.toggle("selected", b === e.currentTarget));
       resetSession();
-      const cnt = document.getElementById("session-count");
-      if (cnt) cnt.textContent = subtitleText();
+      refreshPlayArea();
     });
   });
   document.querySelectorAll("#transpose-radio button").forEach(btn => {
@@ -731,74 +728,92 @@ function renderReady() {
       transposition = e.currentTarget.dataset.trans;
       saveTransposition(transposition);
       document.querySelectorAll("#transpose-radio button").forEach(b => b.classList.toggle("selected", b === e.currentTarget));
+      refreshPlayArea();
     });
   });
-  const micBtn = document.getElementById("btn-enable-mic");
-  if (micBtn) micBtn.addEventListener("click", async () => {
+  document.querySelectorAll("#mode-toggles button").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      const mode = e.currentTarget.dataset.modeToggle;
+      weights[mode] = weights[mode] > 0 ? 0 : 1;
+      saveWeightsToStorage(weights);
+      e.currentTarget.classList.toggle("selected", weights[mode] > 0);
+      resetSession();
+      refreshPlayArea();
+    });
+  });
+  document.querySelector("#arp-toggle button")?.addEventListener("click", (e) => {
+    includeArpeggio = !includeArpeggio;
+    saveArpeggio(includeArpeggio);
+    e.currentTarget.classList.toggle("selected", includeArpeggio);
+    refreshPlayArea();
+  });
+  document.getElementById("btn-enable-mic")?.addEventListener("click", async () => {
     const ok = await initMic();
     if (ok) render();
   });
-  document.querySelectorAll(".weight-row input").forEach(input => {
-    input.addEventListener("input", (e) => {
-      const mode = e.target.dataset.mode;
-      const newVal = parseInt(e.target.value, 10);
-      setWeight(weights, mode, newVal);
-      saveWeightsToStorage(weights);
-      document.querySelectorAll(".weight-row").forEach(row => {
-        const m2 = row.dataset.row;
-        const slider = row.querySelector("input");
-        const pct = row.querySelector(".pct");
-        if (m2 !== mode) slider.value = weights[m2];
-        pct.textContent = weights[m2] + "%";
-        row.classList.toggle("off", weights[m2] === 0);
-      });
-      resetSession();
-      const cnt = document.getElementById("session-count");
-      if (cnt) cnt.textContent = subtitleText();
-      const anyOn = Object.values(weights).some(v => v > 0);
-      const hint = document.querySelector(".stage > .hint");
-      if (hint) hint.innerHTML = anyOn
-        ? "press <strong>space</strong> to start"
-        : "turn on at least one mode to start";
-    });
-  });
 }
 
-function renderPlaying() {
-  const scaleName = scales[index];
-  currentExpected = expectedSequence(scaleName, transpositions[transposition] || 0);
-  const flats = useFlats(scaleName);
-  const seqHTML = currentExpected.uniquePcs.map((pc, i) => {
-    const full = noteName(pc, flats);
-    return `<span class="note" data-slot="${i}" data-full="${full}">${letterOnly(full)}</span>`;
-  }).join("");
-  app.innerHTML = `
-    <div class="stage">
-      <div class="scale-title">
-        <div class="scale">${chordName(scaleName)}</div>
-        <div class="mode-label">${displayMode(modeOf(scaleName))}</div>
-      </div>
-      <div class="sequence" id="sequence">${seqHTML}</div>
-      <div class="heard" id="heard">${audioCtx ? "heard <strong>—</strong>" : ""}</div>
+function refreshPlayArea() {
+  const playArea = document.querySelector(".play-area");
+  if (!playArea) return;
+  playArea.innerHTML = playAreaHTML(scales[index]);
+  if (scales[index]) {
+    updateSequenceUI(0);
+    setupMatcher();
+  } else {
+    currentMatcher = null;
+  }
+}
+
+function setupMatcher() {
+  if (!audioCtx || !noteTracker || !currentExpected) { currentMatcher = null; return; }
+  noteTracker.reset();
+  currentMatcher = new Matcher(
+    currentExpected,
+    (idx) => {
+      updateSequenceUI(idx);
+      if (state === "ready" && idx === 1) beginPlaying();
+    },
+    (t, cv) => onSequenceComplete(cv),
+    () => flashWrong(),
+  );
+}
+
+function beginPlaying() {
+  if (state !== "ready" || !scales[index]) return;
+  const now = performance.now();
+  startTime = now;
+  scaleStart = now;
+  state = "playing";
+  document.querySelectorAll(".widgets").forEach(el => el.remove());
+  const playArea = document.querySelector(".play-area");
+  if (playArea && !playArea.querySelector(".stats")) {
+    playArea.insertAdjacentHTML("beforeend", `
       <div class="stats">
         <span><strong>${index + 1}</strong>${targetMs === null ? " / " + scales.length : ""}</span>
         <span id="timer"><strong>0.00s</strong></span>
       </div>
       <div class="hint">${audioCtx ? "auto-advances on correct play · " : ""}<strong>space</strong> skips · <strong>esc</strong> restarts</div>
+    `);
+  }
+  tickTimer();
+}
+
+function renderPlaying() {
+  const scaleName = scales[index];
+  app.innerHTML = `
+    <div class="stage">
+      <div class="play-area">${playAreaHTML(scaleName)}
+        <div class="stats">
+          <span><strong>${index + 1}</strong>${targetMs === null ? " / " + scales.length : ""}</span>
+          <span id="timer"><strong>0.00s</strong></span>
+        </div>
+        <div class="hint">${audioCtx ? "auto-advances on correct play · " : ""}<strong>space</strong> skips · <strong>esc</strong> restarts</div>
+      </div>
     </div>
   `;
   updateSequenceUI(0);
-  if (audioCtx && noteTracker) {
-    noteTracker.reset();
-    currentMatcher = new Matcher(
-      currentExpected,
-      (idx) => updateSequenceUI(idx),
-      (t, cv) => onSequenceComplete(cv),
-      () => flashWrong(),
-    );
-  } else {
-    currentMatcher = null;
-  }
+  setupMatcher();
   tickTimer();
 }
 
@@ -879,14 +894,6 @@ function tickTimer() {
   requestAnimationFrame(tickTimer);
 }
 
-function startPlaying() {
-  if (!scales || scales.length === 0) return;
-  const now = performance.now();
-  startTime = now;
-  scaleStart = now;
-  state = "playing";
-  render();
-}
 
 function recordSession() {
   const total = times.reduce((s, t) => s + t.ms, 0);
@@ -986,7 +993,7 @@ document.addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT") return;
   if (e.code === "Space") {
     e.preventDefault();
-    if (state === "ready") return startPlaying();
+    if (state === "ready") return beginPlaying();
     if (state === "playing") return completeCurrent();
     if (state === "done") return start();
   } else if (e.code === "Escape") {
