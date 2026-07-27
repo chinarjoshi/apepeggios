@@ -32,6 +32,12 @@
     pointer-events: none;
   }
   .topbar > * { pointer-events: auto; }
+  .mic-debug {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
   .brand {
     display: flex;
     align-items: center;
@@ -91,7 +97,11 @@
   .hint { color: var(--muted); font-size: 0.9rem; }
   .hint strong { color: var(--fg); font-weight: 600; }
   .stats { display: flex; gap: 3rem; color: var(--muted); font-size: 1rem; font-variant-numeric: tabular-nums; }
-  .stats strong { color: var(--fg); font-weight: 500; }
+  /* Reserve room for the widest value each field can reach, so ticking over
+     a digit (9 -> 10, 9.9s -> 10.1s) doesn't shift the centred row. */
+  .stats strong { color: var(--fg); font-weight: 500; display: inline-block; text-align: right; }
+  .stats .stat-count strong { min-width: var(--count-w, 2ch); }
+  .stats .stat-time strong { min-width: 8ch; }
   /* Layers share one grid cell so swapping them never shifts the page. */
   .swap { display: grid; }
   .swap > .layer {
@@ -326,6 +336,7 @@
     <span class="wordmark"><span class="ape">ape</span><span class="peggios">peggios</span></span>
   </a>
   <button id="mic-warn" class="mic-warn">unmute mic</button>
+  <span id="mic-debug" class="mic-debug"></span>
 </header>
 <div id="app"></div>
 <script>
@@ -691,6 +702,7 @@ const TRACKER = {
   onRatio: 10,       // attack when RMS exceeds this multiple of the floor
   offRatio: 0.4,     // release when RMS drops below this fraction of the attack gate
   minOn: 0.006,      // absolute floor so a silent room doesn't trigger on nothing
+  maxOn: 0.03,       // hard ceiling: a bad floor estimate must never deafen us
   floorFall: 0.1,    // floor tracks downward fast...
   floorRise: 0.002,  // ...and upward slowly, so it converges on true ambient
 };
@@ -710,7 +722,8 @@ class NoteTracker {
     this.candCount = 0;
   }
   get rmsOn() {
-    return Math.max(TRACKER.minOn, (this.noiseFloor ?? 0) * TRACKER.onRatio);
+    const scaled = (this.noiseFloor ?? 0) * TRACKER.onRatio;
+    return Math.min(TRACKER.maxOn, Math.max(TRACKER.minOn, scaled));
   }
   process(rms, freq) {
     // Only sample the ambient floor between notes; fall fast, rise slow.
@@ -718,6 +731,9 @@ class NoteTracker {
       if (this.noiseFloor === null) this.noiseFloor = rms;
       const a = rms < this.noiseFloor ? TRACKER.floorFall : TRACKER.floorRise;
       this.noiseFloor += (rms - this.noiseFloor) * a;
+      // Sustained sound must not be mistaken for room noise, or the gate
+      // chases the signal upward and can never be crossed.
+      this.noiseFloor = Math.min(this.noiseFloor, TRACKER.maxOn / TRACKER.onRatio);
     }
     const onGate = this.rmsOn;
     if (this.state === "playing" && rms < onGate * TRACKER.offRatio) {
@@ -797,6 +813,8 @@ class Matcher {
 // Nobody plays a full scale + arpeggio faster than this, so anything quicker
 // is a manual skip (or a spurious detection) and is left out of the stats.
 const MIN_SCALE_MS = 10_000;
+// Let a correct run sit green long enough to register before moving on.
+const SUCCESS_HOLD_MS = 900;
 
 // ===== Audio =====
 let audioCtx = null, analyser = null, mediaStream = null, audioBuf = null;
@@ -829,6 +847,8 @@ async function initMic(silent = false) {
   if (micPending) return false;
   micPending = true;
   try {
+    if (!window.isSecureContext) throw new Error("needs https");
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error("no getUserMedia");
     mediaStream = await navigator.mediaDevices.getUserMedia({ audio: RAW_AUDIO });
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === "suspended") await audioCtx.resume();
@@ -841,10 +861,8 @@ async function initMic(silent = false) {
     detectLoop();
     return true;
   } catch (e) {
-    if (!silent) {
-      alert("Microphone access failed: " + e.message +
-        "\n\nMake sure this page was loaded via http:// or https://, not file://.\nTry:  python3 -m http.server 8000");
-    }
+    micError = e.name === "OverconstrainedError"
+      ? "raw audio refused" : (e.message || e.name);
     setMicStatus(false);
     return false;
   } finally {
@@ -856,9 +874,12 @@ async function resumeAudioIfNeeded() {
     try { await audioCtx.resume(); } catch {}
   }
 }
+let micError = "";
 function setMicStatus(on) {
   const el = document.getElementById("mic-warn");
-  if (el) el.classList.toggle("hidden", on);
+  if (!el) return;
+  el.classList.toggle("hidden", on);
+  el.textContent = micError ? `mic: ${micError}` : "unmute mic";
 }
 function detectLoop() {
   if (!analyser) return;
@@ -866,6 +887,10 @@ function detectLoop() {
   const { freq, rms } = autoCorrelate(audioBuf, audioCtx.sampleRate);
   const active = state === "playing" || state === "ready";
   if (noteTracker && active) noteTracker.process(rms, freq);
+  if (micDebug) {
+    micDebug.textContent = `rms ${rms.toFixed(4)} gate ${noteTracker.rmsOn.toFixed(4)}`
+      + ` floor ${(noteTracker.noiseFloor ?? 0).toFixed(4)} ${freq > 0 ? freq.toFixed(0) + "Hz" : "--"}`;
+  }
   if (active) renderTuner(freq);
   requestAnimationFrame(detectLoop);
 }
@@ -897,6 +922,7 @@ function renderTuner(freq) {
 
 // ===== App state =====
 const app = document.getElementById("app");
+const micDebug = document.getElementById("mic-debug");
 let scales, times, state, startTime, scaleStart, index;
 let skipped = 0;
 let lastSession = null;   // the session just finished, or null if nothing counted
@@ -1046,9 +1072,9 @@ function renderStage() {
           </div>
         </div>
         <div class="layer ${playing ? "" : "faded"}">
-          <div class="stats">
-            <span><strong>${index + 1}</strong> / ${scales.length}</span>
-            <span id="timer"><strong>0.00s</strong> / scale</span>
+          <div class="stats" style="--count-w: ${String(scales.length).length}ch">
+            <span class="stat-count"><strong>${index + 1}</strong> / ${scales.length}</span>
+            <span class="stat-time" id="timer"><strong>0.00s</strong> / scale</span>
           </div>
           <div class="hint">${audioCtx ? "auto-advances on correct play · " : ""}${isTouch() ? "<strong>tap</strong> skips" : "<strong>key</strong> skips · <strong>esc</strong> restarts"}</div>
         </div>
@@ -1226,10 +1252,14 @@ function onSequenceComplete() {
   const scaleEl = document.querySelector(".scale");
   if (scaleEl) scaleEl.classList.add("success");
   document.querySelectorAll(".sequence .note").forEach(n => n.classList.remove("current"));
-  setTimeout(completeCurrent, 350);
+  advanceTimer = setTimeout(completeCurrent, SUCCESS_HOLD_MS);
 }
 
+let advanceTimer = null;
 function completeCurrent() {
+  // A keypress during the success hold would otherwise advance twice.
+  clearTimeout(advanceTimer);
+  advanceTimer = null;
   const now = performance.now();
   const took = now - scaleStart;
   if (took >= MIN_SCALE_MS) {
