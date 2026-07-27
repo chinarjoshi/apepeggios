@@ -120,7 +120,7 @@
     font-family: "Bravura Text", "Segoe UI Symbol", "Apple Symbols", serif;
     font-size: 2.4rem;
     line-height: 0.6;
-    padding-bottom: 0.15rem;
+    transform: translate(-4px, 4px);
   }
   .duration-radio button {
     background: transparent;
@@ -764,9 +764,6 @@ function renderReady() {
       <div class="play-area">${playAreaHTML(scaleName)}</div>
       <div class="widgets widgets-bottom">
         <div class="duration-radio mode-toggles" id="mode-toggles">${modeButtons}</div>
-        <button class="btn-reset" id="btn-reset" title="reset to defaults" aria-label="reset to defaults">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
-        </button>
         ${!audioCtx ? `<button class="btn-mic-inline" id="btn-enable-mic">enable microphone for auto-advance</button>` : ""}
       </div>
     </div>
@@ -782,13 +779,6 @@ function renderReady() {
 }
 
 function attachReadyHandlers() {
-  document.getElementById("btn-reset")?.addEventListener("click", () => {
-    weights = { ...defaultWeights };
-    duration = defaultDuration;
-    saveWeightsToStorage(weights);
-    saveDuration(duration);
-    start();
-  });
   document.querySelectorAll("#duration-radio button").forEach(btn => {
     btn.addEventListener("click", (e) => {
       duration = e.currentTarget.dataset.dur;
