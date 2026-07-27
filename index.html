@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scale Practice</title>
+<style>
+  :root {
+    --bg: #1a1a1a;
+    --fg: #e0e0e0;
+    --muted: #666;
+    --dim: #333;
+    --accent: #ffd866;
+    --good: #8dd88d;
+    --bad: #ff6b6b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+  }
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 2rem; text-align: center; max-width: 100%; }
+  .scale {
+    font-size: clamp(2.5rem, 8vw, 5.5rem);
+    font-weight: 700;
+    line-height: 1;
+    color: var(--accent);
+    letter-spacing: -0.02em;
+    transition: color 0.15s;
+  }
+  .scale.success { color: var(--good); }
+  .mode-label {
+    color: var(--muted);
+    font-size: 0.85rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 0.4rem;
+  }
+  .scale-title { display: flex; flex-direction: column; align-items: center; }
+  .subtitle { font-size: clamp(1.5rem, 4vw, 2.5rem); color: var(--fg); font-weight: 500; }
+  .hint { color: var(--muted); font-size: 0.9rem; }
+  .hint strong { color: var(--fg); font-weight: 600; }
+  .stats { display: flex; gap: 3rem; color: var(--muted); font-size: 1rem; font-variant-numeric: tabular-nums; }
+  .stats strong { color: var(--fg); font-weight: 500; }
+  .ready-meta { display: flex; gap: 2rem; color: var(--muted); font-size: 0.95rem; font-variant-numeric: tabular-nums; flex-wrap: wrap; justify-content: center; }
+  .ready-meta span strong { color: var(--accent); font-weight: 500; }
+  .weights { display: flex; flex-direction: column; gap: 0.5rem; width: 26rem; max-width: 100%; }
+  .weight-row { display: grid; grid-template-columns: 8rem 1fr 3rem; align-items: center; gap: 0.75rem; font-size: 0.85rem; color: var(--muted); }
+  .weight-row .mode-name { text-align: left; }
+  .weight-row .pct { text-align: right; font-variant-numeric: tabular-nums; color: var(--fg); }
+  .weight-row input[type=range] { width: 100%; accent-color: var(--accent); }
+  .weight-row.off .mode-name, .weight-row.off .pct { color: var(--dim); }
+  .btn-reset {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--dim);
+    padding: 0.35rem 0.8rem;
+    font-family: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+  .btn-reset:hover { color: var(--fg); border-color: var(--muted); }
+  .duration-radio { display: flex; gap: 0.35rem; }
+  .duration-radio button {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--dim);
+    padding: 0.4rem 1rem;
+    font-family: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+    border-radius: 4px;
+    font-variant-numeric: tabular-nums;
+    min-width: 3rem;
+  }
+  .duration-radio button:hover { color: var(--fg); border-color: var(--muted); }
+  .duration-radio button.selected {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+  }
+  .btn-mic-inline {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 0.4rem 0.9rem;
+    font-family: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  .btn-mic-inline:hover { background: rgba(255, 216, 102, 0.1); }
+
+  .sequence {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.35rem;
+    max-width: 60rem;
+  }
+  .sequence .note {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.5rem;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid var(--dim);
+    border-radius: 4px;
+    font-size: 0.95rem;
+    color: var(--muted);
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+  }
+  .sequence .note.phase-up {
+    background: rgba(109, 180, 238, 0.15);
+    color: #6db4ee;
+    border-color: #6db4ee;
+  }
+  .sequence .note.phase-down {
+    background: rgba(141, 216, 141, 0.15);
+    color: var(--good);
+    border-color: var(--good);
+  }
+  .sequence .note.phase-arp {
+    background: rgba(255, 216, 102, 0.22);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .sequence .note.current {
+    box-shadow: 0 0 0 2px var(--fg);
+  }
+  .sequence.wrong .note {
+    border-color: var(--bad) !important;
+    color: var(--bad) !important;
+    background: rgba(255, 107, 107, 0.1) !important;
+  }
+
+  .heard {
+    color: var(--muted);
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+    min-height: 1.2em;
+  }
+  .heard strong { color: var(--fg); font-weight: 500; }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  .btn-primary:hover { background: #ffe088; }
+
+  .results { max-width: 44rem; width: 100%; }
+  .results h1 { font-size: 2rem; margin-bottom: 0.25rem; font-weight: 600; }
+  .session-num { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+  .deltas { display: flex; gap: 1.5rem; font-size: 0.9rem; color: var(--muted); font-variant-numeric: tabular-nums; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .deltas .better { color: var(--good); }
+  .deltas .worse { color: var(--bad); }
+  .summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.25rem 2rem; margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--dim); }
+  .summary div span { display: block; color: var(--muted); font-size: 0.75rem; margin-bottom: 0.25rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .summary div strong { font-size: 1.4rem; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--accent); }
+  .summary div em { display: block; color: var(--fg); font-size: 0.8rem; font-style: normal; margin-top: 0.15rem; }
+  .list { max-height: 35vh; overflow-y: auto; font-variant-numeric: tabular-nums; font-size: 0.9rem; margin-bottom: 1.5rem; }
+  .list div { display: flex; justify-content: space-between; padding: 0.4rem 0; border-bottom: 1px solid var(--dim); }
+  .list div:last-child { border-bottom: none; }
+  .list .fast { color: var(--accent); }
+  .list .slow { color: var(--bad); }
+
+  footer { position: fixed; bottom: 1rem; right: 1rem; display: flex; gap: 0.5rem; align-items: center; }
+  footer button, footer .status {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--dim);
+    padding: 0.3rem 0.7rem;
+    font-family: inherit;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 0.75rem;
+  }
+  footer button:hover { color: var(--fg); border-color: var(--muted); }
+  footer .status { cursor: default; }
+  footer .status.on { color: var(--good); border-color: var(--good); }
+  footer .status.off { color: var(--muted); border-color: var(--dim); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<footer>
+  <span id="mic-status" class="status off">mic off</span>
+  <button id="btn-export" title="Download history as JSON">export</button>
+  <button id="btn-import" title="Merge history from JSON">import</button>
+  <input type="file" id="import-file" accept=".json" hidden>
+</footer>
+<script>
+// ===== Music theory =====
+const keySharpsMajor = {
+  "C♭": -7, "G♭": -6, "D♭": -5, "A♭": -4, "E♭": -3, "B♭": -2, "F": -1,
+  "C": 0, "G": 1, "D": 2, "A": 3, "E": 4, "B": 5, "F#": 6, "C#": 7,
+};
+const modeOffsets = {
+  "Major": 0, "Mixolydian": -1, "Dorian": -2, "Minor": -3, "Blues": -3,
+  "MelodicMinor": -3, "HarmonicMinor": -3,
+};
+const modeIntervals = {
+  "Major":         [0, 2, 4, 5, 7, 9, 11],
+  "Minor":         [0, 2, 3, 5, 7, 8, 10],
+  "Mixolydian":    [0, 2, 4, 5, 7, 9, 10],
+  "Dorian":        [0, 2, 3, 5, 7, 9, 10],
+  "Blues":         [0, 3, 5, 6, 7, 10],
+  "MelodicMinor":  [0, 2, 3, 5, 7, 9, 11],
+  "HarmonicMinor": [0, 2, 3, 5, 7, 8, 11],
+};
+const arpeggioIntervals = {
+  "Major":         [0, 4, 7, 11],
+  "Minor":         [0, 3, 7, 10],
+  "Mixolydian":    [0, 4, 7, 10],
+  "Dorian":        [0, 3, 7, 10],
+  "Blues":         [0, 4, 7, 10],
+  "MelodicMinor":  [0, 3, 7, 11],
+  "HarmonicMinor": [0, 3, 7, 11],
+};
+const rootPC = {
+  "C": 0, "C#": 1, "D♭": 1, "D": 2, "E♭": 3, "E": 4, "F": 5,
+  "F#": 6, "G♭": 6, "G": 7, "A♭": 8, "A": 9, "B♭": 10, "B": 11, "C♭": 11,
+};
+const sharpNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const flatNames  = ["C", "D♭", "D", "E♭", "E", "F", "G♭", "G", "A♭", "A", "B♭", "B"];
+const STORAGE_KEY = "scales-history-v1";
+const WEIGHTS_KEY = "scales-weights-v1";
+const DURATION_KEY = "scales-duration-v1";
+const TRANSPOSITION_KEY = "scales-transposition-v1";
+const transpositions = {
+  "C":  0,   // concert
+  "B♭": -2,  // trumpet, tenor sax, clarinet
+  "E♭": 3,   // alto sax, bari sax
+  "F":  -7,  // french horn
+};
+const defaultTransposition = "B♭";
+function loadTransposition() { return localStorage.getItem(TRANSPOSITION_KEY) || defaultTransposition; }
+function saveTransposition(t) { localStorage.setItem(TRANSPOSITION_KEY, t); }
+const defaultWeights = {
+  "Major": 20, "Minor": 20, "Mixolydian": 20, "Dorian": 20, "Blues": 20,
+  "MelodicMinor": 0, "HarmonicMinor": 0,
+};
+const defaultDuration = "unlimited";
+const durationOptions = ["10", "20", "30", "unlimited"];  // minutes
+function loadDuration() { return localStorage.getItem(DURATION_KEY) || defaultDuration; }
+function saveDuration(d) { localStorage.setItem(DURATION_KEY, d); }
+
+function loadWeights() {
+  try {
+    const raw = localStorage.getItem(WEIGHTS_KEY);
+    if (!raw) return { ...defaultWeights };
+    return { ...defaultWeights, ...JSON.parse(raw) };
+  } catch { return { ...defaultWeights }; }
+}
+function saveWeightsToStorage(w) { localStorage.setItem(WEIGHTS_KEY, JSON.stringify(w)); }
+
+// Auto-balance: adjust one weight and rebalance others so sum stays at 100.
+// Decreasing → freed amount split equally among currently-on others (off modes stay off).
+// Increasing → taken from others proportionally.
+function setWeight(w, mode, newVal) {
+  newVal = Math.max(0, Math.min(100, Math.round(newVal)));
+  const oldVal = w[mode];
+  if (newVal === oldVal) return;
+  const delta = newVal - oldVal;
+  const others = Object.keys(w).filter(m => m !== mode);
+
+  if (delta < 0) {
+    const toAdd = -delta;
+    const nonZero = others.filter(m => w[m] > 0);
+    const targets = nonZero.length > 0 ? nonZero : others;
+    if (targets.length > 0) {
+      const each = Math.floor(toAdd / targets.length);
+      let leftover = toAdd - each * targets.length;
+      for (const m of targets) {
+        w[m] += each + (leftover > 0 ? 1 : 0);
+        if (leftover > 0) leftover--;
+      }
+    }
+  } else {
+    const oldOtherSum = others.reduce((s, m) => s + w[m], 0);
+    const targetOther = 100 - newVal;
+    if (oldOtherSum > 0) {
+      const raw = others.map(m => (w[m] / oldOtherSum) * targetOther);
+      const floored = raw.map(Math.floor);
+      let leftover = targetOther - floored.reduce((a, b) => a + b, 0);
+      const fracs = raw.map((r, i) => ({ i, f: r - floored[i] })).sort((a, b) => b.f - a.f);
+      for (let k = 0; k < leftover && k < fracs.length; k++) floored[fracs[k].i]++;
+      others.forEach((m, i) => w[m] = floored[i]);
+    }
+  }
+  w[mode] = newVal;
+}
+
+function activePools(w) {
+  const pools = {};
+  for (const [mode, wt] of Object.entries(w)) {
+    if (wt <= 0) continue;
+    pools[mode] = [];
+    for (const [key, sig] of Object.entries(keySharpsMajor)) {
+      const s = sig + modeOffsets[mode];
+      if (s >= -7 && s <= 7) pools[mode].push(`${key} ${mode}`);
+    }
+  }
+  return pools;
+}
+
+// One of each active-mode scale, shuffled (used for unlimited sessions).
+function buildUnlimitedList(w) {
+  const pools = activePools(w);
+  const out = [];
+  for (const mode of Object.keys(pools)) out.push(...pools[mode]);
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+// Weighted random draw of one scale (used for timed sessions).
+function sampleScale(w) {
+  const pools = activePools(w);
+  const modes = Object.keys(pools);
+  if (modes.length === 0) return null;
+  const totalW = modes.reduce((s, m) => s + w[m], 0);
+  let r = Math.random() * totalW;
+  for (const m of modes) {
+    r -= w[m];
+    if (r <= 0) {
+      const pool = pools[m];
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
+  }
+  const last = modes[modes.length - 1];
+  return pools[last][Math.floor(Math.random() * pools[last].length)];
+}
+
+function estimatedScales(w, duration) {
+  if (duration === "unlimited") return buildUnlimitedList(w).length;
+  // Rough estimate based on user's average per-scale time (~30s) — for UI hint only.
+  return Math.round(parseInt(duration, 10) * 60 / 30);
+}
+function useFlats(scaleName) {
+  const [key, mode] = scaleName.split(" ");
+  return keySharpsMajor[key] + modeOffsets[mode] < 0;
+}
+function noteName(pc, flats) {
+  return (flats ? flatNames : sharpNames)[((pc % 12) + 12) % 12];
+}
+function letterOnly(name) { return name.replace(/[#♭]/g, ""); }
+const chordSuffix = {
+  "Major": "maj7", "Minor": "min7", "Mixolydian": "7", "Dorian": "min7", "Blues": "7",
+  "MelodicMinor": "minMaj7", "HarmonicMinor": "minMaj7",
+};
+function chordName(scaleName) {
+  const [key, mode] = scaleName.split(" ");
+  return key + chordSuffix[mode];
+}
+function modeOf(scaleName) { return scaleName.split(" ")[1]; }
+function displayMode(mode) { return mode.replace(/([a-z])([A-Z])/g, "$1 $2"); }
+function expectedSequence(scaleName, transposeSemi = 0) {
+  const [key, mode] = scaleName.split(" ");
+  const root = rootPC[key];
+  const scale = modeIntervals[mode].map(i => (i + root) % 12);
+  const arp = arpeggioIntervals[mode].map(i => (i + root) % 12);
+  const up = [...scale, root];                 // ascending, incl. top octave
+  const down = [...scale].reverse();           // descending, ending on root
+  const arpUp = arp.slice(1);                  // 3-5-7 (drop leading root)
+  const arpDown = arp.slice(0, -1).reverse();  // 5-3-root
+  const arpFull = [...arpUp, ...arpDown];      // 3-5-7-5-3-1
+  const writtenPcs = [...up, ...down, ...arpFull];
+  const toConcert = pc => ((pc + transposeSemi) % 12 + 12) % 12;
+  const pcs = writtenPcs.map(toConcert);       // what the mic hears (concert)
+  const upEnd = up.length;
+  const downEnd = upEnd + down.length;
+  const slotForPc = {};
+  scale.forEach((pc, i) => { slotForPc[toConcert(pc)] = i; });
+  return { pcs, upEnd, downEnd, uniquePcs: scale, slotForPc, bars: new Set() };
+}
+
+function phaseAt(idx, exp) {
+  if (idx < exp.upEnd) return "up";
+  if (idx < exp.downEnd) return "down";
+  return "arp";
+}
+
+// ===== Pitch detection (autocorrelation) =====
+function autoCorrelate(buf, sampleRate) {
+  const SIZE = buf.length;
+  let sumSq = 0;
+  for (let i = 0; i < SIZE; i++) sumSq += buf[i] * buf[i];
+  const rms = Math.sqrt(sumSq / SIZE);
+  if (rms < 0.005) return { freq: -1, rms };
+
+  let r1 = 0, r2 = SIZE - 1;
+  const thres = 0.2;
+  for (let i = 0; i < SIZE / 2; i++)
+    if (Math.abs(buf[i]) < thres) { r1 = i; break; }
+  for (let i = 1; i < SIZE / 2; i++)
+    if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; }
+  const trimmed = buf.slice(r1, r2);
+  const N = trimmed.length;
+  if (N < 64) return { freq: -1, rms };
+
+  const c = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    let s = 0;
+    for (let j = 0; j < N - i; j++) s += trimmed[j] * trimmed[j + i];
+    c[i] = s;
+  }
+
+  let d = 0;
+  while (d + 1 < N && c[d] > c[d + 1]) d++;
+  let maxv = -Infinity, maxi = -1;
+  for (let i = d; i < N; i++) if (c[i] > maxv) { maxv = c[i]; maxi = i; }
+  if (maxi < 1 || maxi >= N - 1) return { freq: -1, rms };
+
+  const x1 = c[maxi - 1], x2 = c[maxi], x3 = c[maxi + 1];
+  const a = (x1 + x3 - 2 * x2) / 2;
+  const b = (x3 - x1) / 2;
+  const T0 = maxi - (a ? b / (2 * a) : 0);
+  const freq = sampleRate / T0;
+  if (freq < 130 || freq > 1400) return { freq: -1, rms };  // ~trumpet range
+  return { freq, rms };
+}
+
+function freqToPC(freq) {
+  const midi = Math.round(69 + 12 * Math.log2(freq / 440));
+  return ((midi % 12) + 12) % 12;
+}
+
+// ===== Note tracker: emits a note event on each stable pitch onset =====
+class NoteTracker {
+  constructor(onNote) {
+    this.onNote = onNote;
+    this.reset();
+    this.STABILITY = 2;
+    this.RMS_ON = 0.012;
+    this.RMS_OFF = 0.004;
+  }
+  reset() {
+    this.state = "silent";
+    this.currentPC = -1;
+    this.candPC = -1;
+    this.candCount = 0;
+  }
+  process(rms, pc, time) {
+    if (this.state === "playing" && rms < this.RMS_OFF) {
+      this.state = "silent"; this.currentPC = -1; this.candPC = -1; this.candCount = 0;
+      return;
+    }
+    if (this.state === "silent" && rms < this.RMS_ON) return;
+    if (pc < 0) return;
+
+    if (this.state === "silent") {
+      if (this.candPC === pc) this.candCount++;
+      else { this.candPC = pc; this.candCount = 1; }
+      if (this.candCount >= this.STABILITY) {
+        this.state = "playing"; this.currentPC = pc;
+        this.candPC = -1; this.candCount = 0;
+        this.onNote(pc, time);
+      }
+    } else {
+      if (pc === this.currentPC) { this.candPC = -1; this.candCount = 0; }
+      else if (pc === this.candPC) {
+        this.candCount++;
+        if (this.candCount >= this.STABILITY) {
+          this.currentPC = pc; this.candPC = -1; this.candCount = 0;
+          this.onNote(pc, time);
+        }
+      } else { this.candPC = pc; this.candCount = 1; }
+    }
+  }
+}
+
+// ===== Matcher =====
+class Matcher {
+  constructor(expected, onProgress, onSuccess, onWrong) {
+    this.expected = expected;
+    this.matchIdx = 0;
+    this.times = [];
+    this.onProgress = onProgress;
+    this.onSuccess = onSuccess;
+    this.onWrong = onWrong;
+  }
+  input(pc, time) {
+    if (pc === this.expected.pcs[this.matchIdx]) {
+      this.times.push(time);
+      this.matchIdx++;
+      this.onProgress(this.matchIdx);
+      if (this.matchIdx === this.expected.pcs.length) {
+        this.onSuccess(this.times, timingCV(this.times, [...this.expected.bars]));
+      }
+    } else {
+      this.onWrong();
+      this.matchIdx = 0;
+      this.times = [];
+    }
+  }
+}
+
+function timingCV(times, breaks) {
+  const boundaries = [0, ...breaks, times.length];
+  const iois = [];
+  for (let s = 0; s < boundaries.length - 1; s++) {
+    const seg = times.slice(boundaries[s], boundaries[s + 1]);
+    for (let i = 1; i < seg.length; i++) iois.push(seg[i] - seg[i - 1]);
+  }
+  if (iois.length < 2) return 0;
+  const mean = iois.reduce((a, b) => a + b, 0) / iois.length;
+  const variance = iois.reduce((s, x) => s + (x - mean) ** 2, 0) / iois.length;
+  return Math.sqrt(variance) / mean;
+}
+
+const TIMING_CV_MAX = 1.2;  // lenient (higher = more forgiving)
+
+// ===== Audio =====
+let audioCtx = null, analyser = null, mediaStream = null, audioBuf = null;
+let noteTracker = null;
+
+async function initMic(silent = false) {
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = audioCtx.createMediaStreamSource(mediaStream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    src.connect(analyser);
+    audioBuf = new Float32Array(analyser.fftSize);
+    setMicStatus(true);
+    detectLoop();
+    return true;
+  } catch (e) {
+    if (!silent) {
+      alert("Microphone access failed: " + e.message +
+        "\n\nMake sure this page was loaded via http:// or https://, not file://.\nTry:  python3 -m http.server 8000");
+    }
+    setMicStatus(false);
+    return false;
+  }
+}
+function setMicStatus(on) {
+  const el = document.getElementById("mic-status");
+  el.textContent = on ? "mic on" : "mic off";
+  el.className = "status " + (on ? "on" : "off");
+}
+function detectLoop() {
+  if (!analyser) return;
+  analyser.getFloatTimeDomainData(audioBuf);
+  const { freq, rms } = autoCorrelate(audioBuf, audioCtx.sampleRate);
+  const pc = freq > 0 ? freqToPC(freq) : -1;
+  if (noteTracker && state === "playing") noteTracker.process(rms, pc, performance.now());
+  const heardEl = document.getElementById("heard");
+  if (heardEl && state === "playing") {
+    const flats = useFlats(scales[index]);
+    heardEl.innerHTML = pc >= 0 ? `heard <strong>${noteName(pc, flats)}</strong>` : `heard <strong>—</strong>`;
+  }
+  requestAnimationFrame(detectLoop);
+}
+
+// ===== App state =====
+const app = document.getElementById("app");
+let scales, times, state, startTime, scaleStart, index;
+let currentExpected = null, currentMatcher = null;
+let weights = loadWeights();
+let duration = loadDuration();
+let transposition = loadTransposition();
+let targetMs = null;  // null = unlimited
+
+function shuffle(a) {
+  const r = a.slice();
+  for (let i = r.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [r[i], r[j]] = [r[j], r[i]];
+  }
+  return r;
+}
+function fmt(ms) {
+  const s = ms / 1000;
+  if (s < 60) return s.toFixed(2) + "s";
+  const m = Math.floor(s / 60);
+  const rem = (s % 60).toFixed(1).padStart(4, "0");
+  return `${m}m ${rem}s`;
+}
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const d = JSON.parse(raw);
+    return Array.isArray(d) ? d : [];
+  } catch { return []; }
+}
+function saveHistory(h) { localStorage.setItem(STORAGE_KEY, JSON.stringify(h)); }
+
+function resetSession() {
+  times = [];
+  index = 0;
+  startTime = null;
+  if (duration === "unlimited") {
+    scales = buildUnlimitedList(weights);
+    targetMs = null;
+  } else {
+    scales = [];
+    const first = sampleScale(weights);
+    if (first) scales.push(first);
+    targetMs = parseInt(duration, 10) * 60 * 1000;
+  }
+}
+
+function start() {
+  resetSession();
+  state = "ready";
+  render();
+}
+
+function render() {
+  if (state === "ready") return renderReady();
+  if (state === "done") return renderResults();
+  renderPlaying();
+}
+
+function subtitleText() {
+  const anyActive = Object.values(weights).some(v => v > 0);
+  if (!anyActive) return "no modes on";
+  if (duration === "unlimited") return `${buildUnlimitedList(weights).length} scales`;
+  return `${duration} min`;
+}
+
+function renderReady() {
+  const h = loadHistory();
+  let meta = "";
+  if (h.length > 0) {
+    const best = h.reduce((b, s) => s.total_ms < b.total_ms ? s : b);
+    const last = h[h.length - 1];
+    meta = `<div class="ready-meta">
+      <span>sessions <strong>${h.length}</strong></span>
+      <span>best <strong>${fmt(best.total_ms)}</strong></span>
+      <span>last <strong>${fmt(last.total_ms)}</strong></span>
+    </div>`;
+  }
+  const rows = Object.keys(defaultWeights).map(m => {
+    const cls = weights[m] === 0 ? "off" : "";
+    return `<div class="weight-row ${cls}" data-row="${m}">
+      <span class="mode-name">${displayMode(m)}</span>
+      <input type="range" min="0" max="100" step="1" value="${weights[m]}" data-mode="${m}">
+      <span class="pct" data-mode="${m}">${weights[m]}%</span>
+    </div>`;
+  }).join("");
+  const canStart = Object.values(weights).some(v => v > 0);
+  app.innerHTML = `
+    <div class="stage">
+      <div class="subtitle" id="session-count">${subtitleText()}</div>
+      ${meta}
+      <div class="duration-radio" id="duration-radio">
+        ${durationOptions.map(d => `<button class="${d === duration ? "selected" : ""}" data-dur="${d}">${d === "unlimited" ? "∞" : d}</button>`).join("")}
+      </div>
+      <div class="duration-radio" id="transpose-radio">
+        ${Object.keys(transpositions).map(t => `<button class="${t === transposition ? "selected" : ""}" data-trans="${t}">${t}</button>`).join("")}
+      </div>
+      <div class="weights">${rows}</div>
+      <button class="btn-reset" id="btn-reset">reset to defaults</button>
+      ${!audioCtx ? `<button class="btn-mic-inline" id="btn-enable-mic">enable microphone for auto-advance</button>` : ""}
+      <div class="hint">${canStart ? "press <strong>space</strong> to start" : "turn on at least one mode to start"}</div>
+    </div>
+  `;
+  document.getElementById("btn-reset").addEventListener("click", () => {
+    weights = { ...defaultWeights };
+    duration = defaultDuration;
+    saveWeightsToStorage(weights);
+    saveDuration(duration);
+    start();
+  });
+  document.querySelectorAll("#duration-radio button").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      duration = e.currentTarget.dataset.dur;
+      saveDuration(duration);
+      document.querySelectorAll("#duration-radio button").forEach(b => b.classList.toggle("selected", b === e.currentTarget));
+      resetSession();
+      const cnt = document.getElementById("session-count");
+      if (cnt) cnt.textContent = subtitleText();
+    });
+  });
+  document.querySelectorAll("#transpose-radio button").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      transposition = e.currentTarget.dataset.trans;
+      saveTransposition(transposition);
+      document.querySelectorAll("#transpose-radio button").forEach(b => b.classList.toggle("selected", b === e.currentTarget));
+    });
+  });
+  const micBtn = document.getElementById("btn-enable-mic");
+  if (micBtn) micBtn.addEventListener("click", async () => {
+    const ok = await initMic();
+    if (ok) render();
+  });
+  document.querySelectorAll(".weight-row input").forEach(input => {
+    input.addEventListener("input", (e) => {
+      const mode = e.target.dataset.mode;
+      const newVal = parseInt(e.target.value, 10);
+      setWeight(weights, mode, newVal);
+      saveWeightsToStorage(weights);
+      document.querySelectorAll(".weight-row").forEach(row => {
+        const m2 = row.dataset.row;
+        const slider = row.querySelector("input");
+        const pct = row.querySelector(".pct");
+        if (m2 !== mode) slider.value = weights[m2];
+        pct.textContent = weights[m2] + "%";
+        row.classList.toggle("off", weights[m2] === 0);
+      });
+      resetSession();
+      const cnt = document.getElementById("session-count");
+      if (cnt) cnt.textContent = subtitleText();
+      const anyOn = Object.values(weights).some(v => v > 0);
+      const hint = document.querySelector(".stage > .hint");
+      if (hint) hint.innerHTML = anyOn
+        ? (audioCtx ? "play each scale up + down, then arpeggio · " : "") + "press <strong>space</strong> to start"
+        : "turn on at least one mode to start";
+    });
+  });
+}
+
+function renderPlaying() {
+  const scaleName = scales[index];
+  currentExpected = expectedSequence(scaleName, transpositions[transposition] || 0);
+  const flats = useFlats(scaleName);
+  const seqHTML = currentExpected.uniquePcs.map((pc, i) => {
+    const full = noteName(pc, flats);
+    return `<span class="note" data-slot="${i}" data-full="${full}">${letterOnly(full)}</span>`;
+  }).join("");
+  app.innerHTML = `
+    <div class="stage">
+      <div class="scale-title">
+        <div class="scale">${chordName(scaleName)}</div>
+        <div class="mode-label">${displayMode(modeOf(scaleName))}</div>
+      </div>
+      <div class="sequence" id="sequence">${seqHTML}</div>
+      <div class="heard" id="heard">${audioCtx ? "heard <strong>—</strong>" : ""}</div>
+      <div class="stats">
+        <span><strong>${index + 1}</strong>${targetMs === null ? " / " + scales.length : ""}</span>
+        <span id="timer"><strong>0.00s</strong></span>
+      </div>
+      <div class="hint">${audioCtx ? "auto-advances on correct play · " : ""}<strong>space</strong> skips · <strong>esc</strong> restarts</div>
+    </div>
+  `;
+  updateSequenceUI(0);
+  if (audioCtx && noteTracker) {
+    noteTracker.reset();
+    currentMatcher = new Matcher(
+      currentExpected,
+      (idx) => updateSequenceUI(idx),
+      (t, cv) => onSequenceComplete(cv),
+      () => flashWrong(),
+    );
+  } else {
+    currentMatcher = null;
+  }
+  tickTimer();
+}
+
+function updateSequenceUI(matchIdx) {
+  const exp = currentExpected;
+  if (!exp) return;
+  document.querySelectorAll(".sequence .note").forEach(n => {
+    n.classList.remove("phase-up", "phase-down", "phase-arp", "current");
+  });
+  for (let i = 0; i < matchIdx; i++) {
+    const pc = exp.pcs[i];
+    const slot = exp.slotForPc[pc];
+    if (slot === undefined) continue;
+    const el = document.querySelector(`.sequence .note[data-slot="${slot}"]`);
+    if (!el) continue;
+    const phase = phaseAt(i, exp);
+    el.classList.remove("phase-up", "phase-down", "phase-arp");
+    el.classList.add(`phase-${phase}`);
+    if (el.dataset.full) el.textContent = el.dataset.full;
+  }
+  if (matchIdx < exp.pcs.length) {
+    const pc = exp.pcs[matchIdx];
+    const slot = exp.slotForPc[pc];
+    if (slot !== undefined) {
+      const el = document.querySelector(`.sequence .note[data-slot="${slot}"]`);
+      if (el) el.classList.add("current");
+    }
+  }
+}
+
+let wrongTimer = null;
+function flashWrong() {
+  const seq = document.getElementById("sequence");
+  if (!seq) return;
+  seq.classList.add("wrong");
+  clearTimeout(wrongTimer);
+  wrongTimer = setTimeout(() => seq.classList.remove("wrong"), 250);
+  updateSequenceUI(0);
+}
+
+function onSequenceComplete(cv) {
+  currentMatcher = null;
+  const scaleEl = document.querySelector(".scale");
+  if (scaleEl) scaleEl.classList.add("success");
+  document.querySelectorAll(".sequence .note").forEach(n => n.classList.remove("current"));
+  // If timing was too uneven, still advance (lenient) but could optionally require retry.
+  // Keeping lenient per user preference.
+  setTimeout(completeCurrent, cv > TIMING_CV_MAX ? 600 : 350);
+}
+
+function completeCurrent() {
+  const now = performance.now();
+  times.push({ scale: scales[index], ms: now - scaleStart });
+  scaleStart = now;
+  index++;
+  const elapsed = now - startTime;
+  const timeUp = targetMs !== null && elapsed >= targetMs;
+  const listDone = targetMs === null && index >= scales.length;
+  if (timeUp || listDone) {
+    state = "done";
+    recordSession();
+    render();
+    return;
+  }
+  if (targetMs !== null && index >= scales.length) {
+    const next = sampleScale(weights);
+    if (next) scales.push(next);
+  }
+  render();
+}
+
+function tickTimer() {
+  const el = document.getElementById("timer");
+  if (!el || state !== "playing") return;
+  const elapsed = performance.now() - startTime;
+  const display = targetMs !== null ? Math.max(0, targetMs - elapsed) : elapsed;
+  el.innerHTML = `<strong>${fmt(display)}</strong>`;
+  requestAnimationFrame(tickTimer);
+}
+
+function startPlaying() {
+  if (!scales || scales.length === 0) return;
+  const now = performance.now();
+  startTime = now;
+  scaleStart = now;
+  state = "playing";
+  render();
+}
+
+function recordSession() {
+  const total = times.reduce((s, t) => s + t.ms, 0);
+  const session = {
+    date: new Date().toISOString(),
+    total_ms: Math.round(total),
+    avg_ms: Math.round(total / times.length),
+    times: times.map(t => ({ scale: t.scale, ms: Math.round(t.ms) })),
+  };
+  const h = loadHistory();
+  h.push(session);
+  saveHistory(h);
+}
+
+function deltaHTML(cur, other, label) {
+  const d = cur - other;
+  if (d === 0) return `<span>= ${label}</span>`;
+  const cls = d < 0 ? "better" : "worse";
+  const arrow = d < 0 ? "▼" : "▲";
+  return `<span class="${cls}">${arrow} ${fmt(Math.abs(d))} vs ${label}</span>`;
+}
+
+function renderResults() {
+  const h = loadHistory();
+  const cur = h[h.length - 1];
+  const prev = h.length > 1 ? h[h.length - 2] : null;
+  const best = h.reduce((b, s) => s.total_ms < b.total_ms ? s : b);
+  const isPB = cur.total_ms === best.total_ms && h.length > 1;
+  const sorted = cur.times.slice().sort((a, b) => a.ms - b.ms);
+  const fastest = sorted[0], slowest = sorted[sorted.length - 1];
+  let deltas = "";
+  if (prev) {
+    deltas = `<div class="deltas">
+      ${deltaHTML(cur.total_ms, prev.total_ms, "prev")}
+      ${deltaHTML(cur.total_ms, best.total_ms, "best")}
+      ${isPB ? '<span class="better">★ new best</span>' : ""}
+    </div>`;
+  }
+  app.innerHTML = `
+    <div class="results">
+      <h1>done</h1>
+      <div class="session-num">session #${h.length}</div>
+      ${deltas}
+      <div class="summary">
+        <div><span>total</span><strong>${fmt(cur.total_ms)}</strong></div>
+        <div><span>avg / scale</span><strong>${fmt(cur.avg_ms)}</strong></div>
+        <div><span>fastest</span><strong>${fmt(fastest.ms)}</strong><em>${chordName(fastest.scale)} · ${displayMode(modeOf(fastest.scale))}</em></div>
+        <div><span>slowest</span><strong>${fmt(slowest.ms)}</strong><em>${chordName(slowest.scale)} · ${displayMode(modeOf(slowest.scale))}</em></div>
+      </div>
+      <div class="list">
+        ${cur.times.map(t => {
+          const c = t.ms === fastest.ms ? "fast" : t.ms === slowest.ms ? "slow" : "";
+          return `<div class="${c}"><span>${chordName(t.scale)} · ${displayMode(modeOf(t.scale))}</span><span>${fmt(t.ms)}</span></div>`;
+        }).join("")}
+      </div>
+      <div class="hint">press <strong>space</strong> or <strong>esc</strong> to restart</div>
+    </div>
+  `;
+}
+
+// ===== Export / Import =====
+function exportJSON() {
+  const h = loadHistory();
+  if (h.length === 0) { alert("No history to export yet."); return; }
+  const blob = new Blob([JSON.stringify(h, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `scales-history-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function importJSON(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!Array.isArray(data)) throw new Error("expected an array of sessions");
+      for (const s of data) {
+        if (!s.date || typeof s.total_ms !== "number" || !Array.isArray(s.times))
+          throw new Error("session missing required fields");
+      }
+      const existing = loadHistory();
+      const seen = new Set(existing.map(s => s.date));
+      const added = data.filter(s => !seen.has(s.date));
+      const merged = [...existing, ...added].sort((a, b) => a.date.localeCompare(b.date));
+      saveHistory(merged);
+      alert(`Imported ${added.length} new session(s). Total: ${merged.length}.`);
+      if (state === "ready") render();
+    } catch (e) { alert("Import failed: " + e.message); }
+  };
+  reader.readAsText(file);
+}
+
+// ===== Events =====
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.code === "Space") {
+    e.preventDefault();
+    if (state === "ready") return startPlaying();
+    if (state === "playing") return completeCurrent();
+    if (state === "done") return start();
+  } else if (e.code === "Escape") {
+    e.preventDefault();
+    start();
+  }
+});
+
+document.getElementById("btn-export").addEventListener("click", exportJSON);
+document.getElementById("btn-import").addEventListener("click", () =>
+  document.getElementById("import-file").click());
+document.getElementById("import-file").addEventListener("change", (e) => {
+  const f = e.target.files[0];
+  if (f) importJSON(f);
+  e.target.value = "";
+});
+
+noteTracker = new NoteTracker((pc, time) => {
+  if (currentMatcher) currentMatcher.input(pc, time);
+});
+
+start();
+
+(async () => {
+  try {
+    const perm = await navigator.permissions.query({ name: "microphone" });
+    if (perm.state === "granted") {
+      if (await initMic(true) && state === "ready") render();
+      return;
+    }
+  } catch {}
+  if (await initMic(true) && state === "ready") render();
+})();
+</script>
+</body>
+</html>
