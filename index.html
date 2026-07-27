@@ -18,7 +18,7 @@
     --good: #8dd88d;
     --bad: #ff6b6b;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   .brand {
     position: fixed;
     top: 1.25rem;
@@ -81,7 +81,8 @@
   .hint strong { color: var(--fg); font-weight: 600; }
   .stats { display: flex; gap: 3rem; color: var(--muted); font-size: 1rem; font-variant-numeric: tabular-nums; }
   .stats strong { color: var(--fg); font-weight: 500; }
-  .ready-meta { display: flex; gap: 2rem; color: var(--muted); font-size: 0.95rem; font-variant-numeric: tabular-nums; flex-wrap: wrap; justify-content: center; }
+  /* Matches .stats — the two cross-fade in the same slot, so a size jump shows. */
+  .ready-meta { display: flex; gap: 3rem; color: var(--muted); font-size: 1rem; font-variant-numeric: tabular-nums; flex-wrap: wrap; justify-content: center; }
   .ready-meta span strong { color: var(--accent); font-weight: 500; }
   .widgets { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; }
   /* Layers share one grid cell so swapping them never shifts the page. */
@@ -110,7 +111,9 @@
     align-items: center;
     justify-content: center;
   }
-  .btn-reset:hover { color: var(--fg); border-color: var(--muted); }
+  @media (hover: hover) {
+    .btn-reset:hover { color: var(--fg); border-color: var(--muted); }
+  }
   .btn-reset svg { display: block; }
   .duration-radio {
     display: flex;
@@ -151,19 +154,32 @@
     line-height: 1.3;
     transition: color 0.1s;
   }
-  .duration-radio button:hover { color: var(--fg); }
+  /* Only real pointers get hover — on touch it sticks after a tap and
+     makes the toggle look like it didn't change. */
+  @media (hover: hover) {
+    .duration-radio button:hover { color: var(--fg); }
+  }
   .duration-radio button.selected { color: var(--accent); }
+  .duration-radio button:active { transform: scale(0.94); }
+  /* The glyph reads small next to the digits, so scale it without
+     changing the button's line box. */
+  .infinity { font-size: 1.35em; line-height: 0; vertical-align: -0.06em; }
   .btn-mic-inline {
-    background: transparent;
-    color: var(--accent);
-    border: 1px solid var(--accent);
-    padding: 0.4rem 0.9rem;
+    background: var(--accent);
+    color: #1a1a1a;
+    border: none;
+    padding: 0.5rem 1.1rem;
     font-family: inherit;
     font-size: 0.85rem;
+    font-weight: 600;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: 5px;
+    transition: background 0.12s, transform 0.08s;
   }
-  .btn-mic-inline:hover { background: rgba(255, 216, 102, 0.1); }
+  @media (hover: hover) {
+    .btn-mic-inline:hover { background: #ffe490; }
+  }
+  .btn-mic-inline:active { transform: scale(0.96); }
 
   .sequence {
     display: flex;
@@ -238,7 +254,9 @@
     cursor: pointer;
     border-radius: 4px;
   }
-  .btn-primary:hover { background: #ffe088; }
+  @media (hover: hover) {
+    .btn-primary:hover { background: #ffe088; }
+  }
 
   .results { max-width: 44rem; width: 100%; }
   .session-num { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
@@ -289,6 +307,29 @@
     background: var(--bad);
   }
   .mic-warn.hidden { display: none; }
+
+  /* Narrow screens: let the 8 note pills shrink to share one row. */
+  @media (max-width: 620px) {
+    body { padding: 1rem 0.5rem; }
+    /* These are all shrink-to-fit flex items by default, so the sequence's
+       width:100% would resolve against its own content. Stretch the chain. */
+    #app, .stage, .play-area { width: 100%; }
+    .stage { gap: 1.25rem; }
+    .play-area { gap: 1rem; margin-top: 0.5rem; }
+    .sequence {
+      flex-wrap: nowrap;
+      gap: 0.25rem;
+      width: 100%;
+    }
+    .sequence .note {
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 0.55rem 0.1rem;
+      font-size: 1rem;
+    }
+    .brand { font-size: 1.35rem; top: 0.75rem; left: 0.75rem; }
+    .brand .trumpet { width: 34px; height: 34px; }
+  }
 </style>
 </head>
 <body>
@@ -372,10 +413,10 @@ const historyStore = store("scales-history-v1", [], v => Array.isArray(v) ? v : 
 const weightsStore = store("scales-weights-v1", defaultWeights, v => ({ ...defaultWeights, ...v }));
 const durationStore = store("scales-duration-v1", "unlimited");
 const transpositionStore = store("scales-transposition-v1", "C");
-const patternsStore = store("scales-patterns-v2", ["scale"], v => {
-  const kept = Array.isArray(v) ? v.filter(p => patternOptions.includes(p)) : [];
-  return kept.length ? kept : undefined;
-});
+// An empty array is a valid saved state (all patterns off), so only a
+// non-array falls back to the default.
+const patternsStore = store("scales-patterns-v2", ["scale"], v =>
+  Array.isArray(v) ? v.filter(p => patternOptions.includes(p)) : undefined);
 
 function activePools(w) {
   const pools = {};
@@ -895,8 +936,8 @@ let currentPattern = activePatterns[0];
 let currentNotation = NOTATIONS[0];
 let targetMs = null;  // null = unlimited
 function pickPattern() {
-  const pool = activePatterns.length ? activePatterns : patternOptions.slice(0, 1);
-  return pool[Math.floor(Math.random() * pool.length)];
+  if (!activePatterns.length) return null;   // all off — same as all modes off
+  return activePatterns[Math.floor(Math.random() * activePatterns.length)];
 }
 function pickNotation() {
   return NOTATIONS[Math.floor(Math.random() * NOTATIONS.length)];
@@ -939,12 +980,21 @@ function render() {
   renderStage();   // handles both "ready" and "playing"
 }
 
+// True when there's nothing to practice because a whole toggle row is off.
+function nothingSelected() { return !scales[index] || !currentPattern; }
+function emptyStateLabel() {
+  const missing = [];
+  if (!scales[index]) missing.push("modes");
+  if (!currentPattern) missing.push("patterns");
+  return `no ${missing.join(" or ")} on`;
+}
+
 function playAreaHTML(scaleName) {
-  // Mirror the real layout's structure so toggling the last mode off doesn't resize the page.
-  if (!scaleName) return `
+  // Mirror the real layout's structure so toggling the last one off doesn't resize the page.
+  if (nothingSelected()) return `
     <div class="scale-title">
       <div class="scale">&nbsp;</div>
-      <div class="mode-label">no modes on</div>
+      <div class="mode-label">${emptyStateLabel()}</div>
       <div class="mode-label">&nbsp;</div>
     </div>
     <div class="sequence"><span class="note placeholder"></span></div>
@@ -994,7 +1044,7 @@ function renderStage() {
     </div>`;
   }
   const durationButtons = durationOptions.map(d =>
-    `<button class="${d === duration ? "selected" : ""}" data-dur="${d}">${d === "unlimited" ? "∞" : d}</button>`).join("");
+    `<button class="${d === duration ? "selected" : ""}" data-dur="${d}">${d === "unlimited" ? `<span class="infinity">∞</span>` : d}</button>`).join("");
   const transposeButtons = Object.keys(transpositions).map(t =>
     `<button class="${t === transposition ? "selected" : ""}" data-trans="${t}">${t}</button>`).join("");
   const patternButtons = patternOptions.map(p =>
@@ -1036,16 +1086,16 @@ function renderStage() {
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 15.5A8 8 0 0 1 9 5a7 7 0 1 0 11 10.5z"/></svg>
             </span>
           </div>
-          ${!audioCtx ? `<button class="btn-mic-inline" id="btn-enable-mic">enable microphone for auto-advance</button>` : ""}
+          ${!audioCtx ? `<button class="btn-mic-inline" id="btn-enable-mic">enable microphone</button>` : ""}
         </div>
         <div class="layer ${playing ? "" : "faded"}">
-          <div class="hint">${audioCtx ? "auto-advances on correct play · " : ""}<strong>space</strong> skips · <strong>esc</strong> restarts</div>
+          <div class="hint">${audioCtx ? "auto-advances on correct play · " : ""}<strong>key</strong> or tap skips · <strong>esc</strong> restarts</div>
         </div>
       </div>
     </div>
   `;
 
-  if (scaleName) {
+  if (!nothingSelected()) {
     updateSequenceUI(0);
     setupMatcher();
   } else {
@@ -1077,12 +1127,8 @@ function attachReadyHandlers() {
     btn.addEventListener("click", (e) => {
       const p = e.currentTarget.dataset.pattern;
       const idx = activePatterns.indexOf(p);
-      if (idx >= 0) {
-        if (activePatterns.length === 1) return;  // keep at least one selected
-        activePatterns.splice(idx, 1);
-      } else {
-        activePatterns.push(p);
-      }
+      if (idx >= 0) activePatterns.splice(idx, 1);
+      else activePatterns.push(p);
       patternsStore.save(activePatterns);
       e.currentTarget.classList.toggle("selected", activePatterns.includes(p));
       currentPattern = pickPattern();
@@ -1110,7 +1156,7 @@ function refreshPlayArea() {
   const playArea = document.querySelector(".play-area");
   if (!playArea) return;
   playArea.innerHTML = playAreaHTML(scales[index]);
-  if (scales[index]) {
+  if (!nothingSelected()) {
     updateSequenceUI(0);
     setupMatcher();
   } else {
@@ -1160,7 +1206,7 @@ pendingRewind = holdTimer(HOLD_MS, ({ pc, rewindTo, time, cents }) => {
 });
 
 function beginPlaying() {
-  if (state !== "ready" || !scales[index]) return;
+  if (state !== "ready" || nothingSelected()) return;
   resumeAudioIfNeeded();
   const now = performance.now();
   startTime = now;
@@ -1322,7 +1368,7 @@ function renderResults() {
     app.innerHTML = `
       <div class="results">
         <div class="session-num">every scale skipped — nothing recorded</div>
-        <div class="hint">press <strong>space</strong> or <strong>esc</strong> to restart</div>
+        <div class="hint">press <strong>key</strong> to restart</div>
       </div>
     `;
     return;
@@ -1359,23 +1405,34 @@ function renderResults() {
           return `<div class="${c}"><span>${chordName(t.scale)}</span><span class="row-mode">${displayMode(modeOf(t.scale))}</span><span>${fmt(t.ms)}</span></div>`;
         }).join("")}
       </div>
-      <div class="hint">press <strong>space</strong> or <strong>esc</strong> to restart</div>
+      <div class="hint">press <strong>key</strong> to restart</div>
     </div>
   `;
 }
 
 // ===== Events =====
+// Keys that shouldn't count as "any key" — modifiers alone, and nav keys.
+const INERT_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock", "Tab"]);
+
+function advanceFromInput() {
+  if (state === "ready") return beginPlaying();
+  if (state === "playing") return completeCurrent();
+  if (state === "done") return start();
+}
+
 document.addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT") return;
-  if (e.code === "Space") {
-    e.preventDefault();
-    if (state === "ready") return beginPlaying();
-    if (state === "playing") return completeCurrent();
-    if (state === "done") return start();
-  } else if (e.code === "Escape") {
-    e.preventDefault();
-    start();
-  }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;   // leave browser shortcuts alone
+  if (INERT_KEYS.has(e.key)) return;
+  e.preventDefault();
+  if (e.code === "Escape") return start();
+  advanceFromInput();
+});
+
+// Mobile: tapping anywhere off a control does the same as a keypress.
+document.addEventListener("click", (e) => {
+  if (e.target.closest("button, a, input, select")) return;
+  advanceFromInput();
 });
 
 // iOS: audio context often lands in "suspended"; resume on any user gesture.
