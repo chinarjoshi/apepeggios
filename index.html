@@ -212,7 +212,6 @@
   .sequence .note.current {
     box-shadow: 0 0 0 2px var(--fg);
   }
-  .sequence .note[data-slot] { cursor: pointer; }
   /* Hidden until played, but still clickable via each note's hit strip. */
   .sequence .note.placeholder { border-color: transparent; cursor: default; }
 
@@ -690,7 +689,6 @@ function buildExpected(scaleName, transposeSemi = 0, patternKey = "scale") {
     single, double, branchIdx,
     displayNames: ctx.displayNames,
     writtenByPc: ctx.writtenByPc,
-    octaveSlot: ctx.octaveSlot,
   };
 }
 
@@ -989,7 +987,7 @@ function detectLoop() {
   analyser.getFloatTimeDomainData(audioBuf);
   const { freq, rms } = autoCorrelate(audioBuf, audioCtx.sampleRate);
   const active = state === "playing" || state === "ready";
-  if (noteTracker && active && performance.now() > suppressDetectUntil) noteTracker.process(rms, freq, performance.now());
+  if (noteTracker && active) noteTracker.process(rms, freq, performance.now());
   if (micDebug) {
     // Dashes stand in at exactly the width of a reading, so the pitch
     // dropping in and out swaps in place instead of resizing the line.
@@ -1027,61 +1025,6 @@ function renderTuner(freq, rms) {
     arcEl.setAttribute("d", tuningArcPath(smoothedCents));
     arcEl.style.stroke = color;
   }
-}
-
-// ===== Reference tone =====
-// Sounds at concert pitch, matching what the horn would actually produce.
-let suppressDetectUntil = 0;
-
-function playPitch(concertPc, slot) {
-  if (!audioCtx || !currentMatcher) return;
-  const path = currentMatcher.currentPath();
-  const rel = pcMod(concertPc - path.pcs[0]);
-  const octave = slot === currentMatcher.expected.octaveSlot ? 12 : 0;
-  const midi = 48 + path.pcs[0] + rel + octave;
-  const t = audioCtx.currentTime;
-
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = "triangle";
-  osc.frequency.value = PITCH.a4 * Math.pow(2, (midi - PITCH.a4Midi) / SEMITONES);
-  gain.gain.setValueAtTime(0, t);
-  gain.gain.linearRampToValueAtTime(0.22, t + 0.012);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
-  osc.connect(gain).connect(audioCtx.destination);
-  osc.start(t);
-  osc.stop(t + 0.6);
-
-  // Don't let the speakers feed the tone back into the matcher.
-  suppressDetectUntil = performance.now() + 700;
-  noteTracker?.reset();
-}
-
-// Clicking a pill jumps to the next place that note is due, revealing
-// everything up to it. Searching the committed path means the second octave
-// is only reachable once you've actually chosen it.
-function jumpToSlot(slot) {
-  if (!currentMatcher || nothingSelected()) return;
-  if (state === "ready") beginPlaying();
-  const path = currentMatcher.currentPath();
-  let idx = -1;
-  for (let i = currentMatcher.matchIdx; i < path.slots.length; i++) {
-    if (path.slots[i] === slot) { idx = i; break; }
-  }
-  if (idx < 0) return;
-  currentMatcher.matchIdx = idx + 1;
-  // Jumping past the branch point commits to the path we searched, otherwise
-  // the branch test never fires again and the second octave is locked out.
-  if (currentMatcher.expected.branchIdx !== null
-      && currentMatcher.matchIdx > currentMatcher.expected.branchIdx
-      && currentMatcher.path === null) {
-    currentMatcher.path = "single";
-  }
-  // null, not 0 — a revealed note shouldn't score as perfectly in tune.
-  while (currentMatcher.cents.length < currentMatcher.matchIdx) currentMatcher.cents.push(null);
-  currentMatcher.cents.length = currentMatcher.matchIdx;
-  updateSequenceUI();
-  playPitch(path.pcs[idx], slot);
 }
 
 // ===== App state =====
@@ -1524,10 +1467,7 @@ document.addEventListener("keydown", (e) => {
 });
 
 
-// Pills are interactive on every device; only the empty background skips.
 document.addEventListener("click", (e) => {
-  const pill = e.target.closest(".sequence .note[data-slot]");
-  if (pill) return jumpToSlot(Number(pill.dataset.slot));
   if (!isTouch()) return;
   if (e.target.closest("button, a, input, select, .brand")) return;
   advanceFromInput();
