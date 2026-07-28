@@ -1,13 +1,8 @@
 // Regression tests for index.html.  Run: node test.mjs
 //
-// Every assertion here corresponds to something that actually broke during
-// development, so a failure means a real behaviour has regressed rather than
-// a style preference has been violated.
-//
-// The whole <script> is evaluated in one vm context against a stub DOM. That
-// makes the suite indifferent to how the file is ordered internally, and it
-// means "the app boots" is itself covered — two past regressions were
-// ReferenceErrors thrown during init.
+// Every assertion covers something that actually broke. The whole <script>
+// runs in one vm against a stub DOM, so the suite survives reordering and
+// "the app boots" is itself covered.
 
 import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
@@ -90,9 +85,8 @@ function boot({ storage = {}, hover = true, width = 1440, clock = { t: 0 } } = {
   return ctx.__api;
 }
 
-// Each check below is the sole or near-sole detector of at least one real
-// regression, measured by mutation testing. Assertions are folded together
-// rather than split across cases: a case that catches nothing is noise.
+// Each check is the sole or near-sole detector of a real regression, chosen
+// by mutation testing. A case that catches nothing is noise.
 
 let api;
 check("boots without throwing", () => { api = boot(); ok(api, "no api exported"); });
@@ -100,7 +94,7 @@ if (!api) { console.error("boot failed; aborting"); process.exit(1); }
 
 // ------------------------------------------------------------------ theory
 
-// The bug this project started from: D♭ minor would need 8 flats.
+// Where this project started: D♭ minor would need 8 flats.
 check("key signatures stay inside seven accidentals", () => {
   for (const m of api.MODES)
     for (const [key, sig] of Object.entries(api.keySharpsMajor)) {
@@ -119,9 +113,7 @@ check("scales are spelled diatonically", () => {
   eq(api.scaleSpelling("G♭ Major"), ["G♭","A♭","B♭","C♭","D♭","E♭","F"], "G♭ major");
   eq(api.scaleSpelling("C♭ Major"), ["C♭","D♭","E♭","F♭","G♭","A♭","B♭"], "C♭ major");
   eq(api.scaleSpelling("F♯ Major"), ["F♯","G♯","A♯","B","C♯","D♯","E♯"], "F♯ major");
-  // Blues is the exception: six notes, and it repeats a letter.
-  eq(api.scaleSpelling("C Blues"), ["C","E♭","F","G♭","G","B♭"], "C blues");
-  // Every seven-note mode uses each letter exactly once.
+    eq(api.scaleSpelling("C Blues"), ["C","E♭","F","G♭","G","B♭"], "C blues");
   for (const m of api.MODES) {
     if (api.MODE[m.id].scale.length !== 7) continue;
     for (const name of api.activePools({ [m.id]: 1 })[m.id]) {
@@ -139,8 +131,8 @@ check("chords and arpeggios match their mode", () => {
   eq(api.MODES.map(m => m.arp.join("-")).join("  "),
      "0-4-7-11  0-4-7-11  0-4-7-10  0-3-7-11  0-3-7-10  0-3-7-11  0-3-7-10  0-3-7-10",
      "arpeggio intervals");
-  // An arpeggio tone outside its own scale has no pill to light up. Blues
-  // shipped broken this way: a natural 3rd it does not contain.
+  // A tone outside its own scale has no pill to light up. Blues shipped
+  // broken this way, with a natural 3rd it does not contain.
   for (const m of api.MODES)
     for (const tone of m.arp)
       ok(m.scale.includes(tone), `${m.id} arpeggio tone ${tone} is not in the scale`);
@@ -156,16 +148,14 @@ check("runs ascend and descend exactly", () => {
   const c = api.scaleContext("C Major", 0);
   eq(asDegrees(c, api.intervalSeg(c, 2, "up")),
      "1 3 2 4 3 5 4 6 5 7 6 8 7 2 8", "3rds up");
-  // The descent mirrors the exercise rather than replaying the ascent
-  // backwards: it opens 8-6, not a leap up to the 9th, and ends 3-1, 2-7, 1.
+  // Mirrors the exercise, not the ascent reversed: opens 8-6, ends 2-7, 1.
   eq(asDegrees(c, api.intervalSeg(c, 2, "down", "down")),
      "8 6 7 5 6 4 5 3 4 2 3 1 2 7 1", "3rds down");
   eq(asDegrees(c, api.groupSeg(c, 3, "up")),
      "1 2 3 2 3 4 3 4 5 4 5 6 5 6 7 6 7 8 7 8 2 8", "in3s up");
   eq(asDegrees(c, api.groupSeg(c, 3, "down", "down")),
      "8 7 6 7 6 5 6 5 4 5 4 3 4 3 2 3 2 1 2 1 7 1", "in3s down");
-  // The turnaround is struck once. A doubled pitch is invisible to the
-  // tracker, which reports changes, so it would stall the run.
+  // Struck once: a doubled pitch is invisible to the tracker and would stall.
   for (const pat of ["scale", "thirds", "in3s"])
     for (const which of ["single", "double"]) {
       const pcs = api.buildExpected("C Major", 0, pat)[which].pcs;
@@ -203,7 +193,6 @@ check("a correct run completes, keeps its cents, and ignores strays", () => {
   ok(done, "onSuccess never fired");
   eq(m.cents.length, e.single.pcs.length, "cents recorded");
   ok(m.cents.every(c => c === 7), "cents preserved");
-  // A note belonging to neither the run nor its history changes nothing.
   const m2 = new api.Matcher(e, { onProgress() {}, onSuccess() {} });
   for (let i = 0; i < 3; i++) m2.input(e.single.pcs[i], 0);
   m2.input((e.single.pcs[0] + 1) % 12, 0);
@@ -222,8 +211,7 @@ await checkAsync("a backward note rewinds, unless you play on", async () => {
   eq(m.matchIdx, 2, "did not rewind once the hold elapsed");
   eq(m.cents.length, 2, "cents not truncated with the rewind");
 
-  // Carrying on cancels a pending rewind, so a stray detection you play
-  // straight through never costs progress.
+  // Carrying on cancels it, so a stray played through never costs progress.
   const m2 = new api.Matcher(e, { onProgress() {}, onSuccess() {} });
   for (let i = 0; i < 4; i++) m2.input(e.single.pcs[i], 0);
   m2.input(e.single.pcs[1], 0);                 // arms a rewind
@@ -251,8 +239,7 @@ check("the gate adapts to the room", () => {
   const floor = 0.0012;
   for (let i = 0; i < 400; i++) t.process(floor, -1, i * 16);
   eq(t.noiseFloor.toFixed(5), floor.toFixed(5), "floor did not converge on ambient");
-  // A literal, deliberately: deriving it from TRACKER would move with any
-  // constant the test is meant to be guarding. 0.0012 x onRatio 10 x boost 1.8.
+  // Literal on purpose: deriving it would move with the constants it guards.
   eq(t.rmsOn.toFixed(4), "0.0216", "gate is not floor x onRatio x boost");
   // A laptop mic hears more of the room, so it must demand more signal.
   const quiet = boot({ hover: false });
@@ -270,17 +257,13 @@ check("only sustained pitches count", () => {
     fn(heard, t);
     return t;
   };
-  // A deliberate slide, ~80ms per semitone: fast enough to be a gliss, slow
-  // enough that a short hold would wrongly count all twelve.
+  // ~80ms per semitone: slow enough that a short hold would count all twelve.
   sweep(h => eq(h.length, 0, `gliss produced ${h.length} notes: ${h}`),
         65, i => 60 + Math.floor(i / 5));
-  // One pitch, held: exactly one note however long it rings.
   sweep((h, t) => { eq(h, [9], "A should fire once"); eq(t.state, "playing", "never left silence"); },
         120, () => 69);
-  // Held notes in sequence, in order.
   sweep(h => eq(h, [0, 2, 4, 5, 7], "held notes out of order"),
         200, i => [60, 62, 64, 65, 67][Math.floor(i / 40)]);
-  // Releasing resets, so the same pitch can be struck again.
   const t = new api.NoteTracker(() => {});
   for (let i = 0; i < 40; i++) t.process(0.2, 440, i * 16);
   eq(t.state, "playing", "note never registered");
@@ -312,8 +295,7 @@ check("pitch detection spans the advertised range", () => {
 // ------------------------------------------------------------- persistence
 
 check("storage tolerates unknown and corrupt values", () => {
-  // An unrecognised mode id used to throw during init and blank the page,
-  // which meant no mode could ever be renamed or removed.
+  // An unrecognised mode id used to throw during init and blank the page.
   const a = boot({ storage: { "scales-weights-v1": JSON.stringify({ Major: 1, Aeolian: 1 }) } });
   const w = a.weightsStore.load();
   ok(!("Aeolian" in w), "unknown mode survived the load");
@@ -332,8 +314,7 @@ await checkAsync("a completed scale records its intonation", async () => {
   const pcs = m.expected.single.pcs;
   m.input(pcs[0], 11);
   eq(a.state, "playing", "run did not start on the first note");
-  // Just past the derived floor for 21 notes, so this fails if the floor
-  // drifts in either direction.
+  // Just past the derived floor, so this fails if it drifts either way.
   clock.t = 21 * api.TRACKER.holdMs;
   for (let i = 1; i < pcs.length; i++) m.input(pcs[i], 11);
   await new Promise(r => setTimeout(r, 700));
@@ -354,8 +335,7 @@ await checkAsync("runs that cannot have been played are not recorded", async () 
   await new Promise(r => setTimeout(r, 700));
   eq(a.times.length, 0, "an impossibly fast run was recorded");
 
-  // Advancing by hand is a skip however long it took: nothing confirmed the
-  // scale was played, so timing it would just be timing a keypress.
+  // A skip however long it took: timing a keypress isn't timing the playing.
   const c2 = { t: 0 };
   const b = boot({ clock: c2 });
   b.matcher.input(b.matcher.expected.single.pcs[0], 0);

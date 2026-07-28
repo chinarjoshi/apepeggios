@@ -31,7 +31,7 @@
     align-items: center;
     justify-content: space-between;
     z-index: 10;
-    /* Spans the full width, so let clicks through the empty middle. */
+    /* Full width, so let clicks through the empty middle. */
     pointer-events: none;
   }
   .topbar > * { pointer-events: auto; }
@@ -78,8 +78,7 @@
   .stage { display: flex; flex-direction: column; align-items: center; gap: 2rem; text-align: center; max-width: 100%; }
   .play-area { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; margin-top: 1.5rem; }
   .scale {
-    /* Set by fitChordSize(): the largest size at which the longest possible
-       chord name still fits, so it never changes as modes are toggled. */
+    /* fitChordSize(): largest size the longest possible name still fits at. */
     font-size: var(--scale-size, 3.5rem);
     white-space: nowrap;
     font-weight: 700;
@@ -101,8 +100,7 @@
   .hint { color: var(--muted); font-size: 0.9rem; }
   .hint strong { color: var(--fg); font-weight: 600; }
   .stats { display: flex; gap: 3rem; color: var(--muted); font-size: 1rem; font-variant-numeric: tabular-nums; }
-  /* Reserve room for the widest value each field can reach, so ticking over
-     a digit (9 -> 10, 9.9s -> 10.1s) doesn't shift the centred row. */
+  /* Fixed width per field, so 9 -> 10 doesn't shift the centred row. */
   .stats strong { color: var(--fg); font-weight: 500; display: inline-block; text-align: right; }
   .stats .stat-count strong { min-width: var(--count-w, 2ch); }
   .stats .stat-time strong { min-width: 8ch; }
@@ -159,8 +157,7 @@
     line-height: 1.3;
     transition: color 0.1s;
   }
-  /* Only real pointers get hover — on touch it sticks after a tap and
-     makes the toggle look like it didn't change. */
+  /* On touch, hover sticks after a tap and the toggle looks unchanged. */
   @media (hover: hover) {
     .option-bar button:hover { color: var(--fg); }
   }
@@ -187,8 +184,7 @@
     color: var(--muted);
     transition: background 0.1s, color 0.1s, border-color 0.1s;
   }
-  /* An empty pill has no line box and collapses to min-height, then grows
-     when its name appears. A zero-width char keeps the height constant. */
+  /* An empty pill has no line box; a zero-width char keeps the height fixed. */
   .sequence .note::before { content: "\200b"; }
   .sequence .note.phase-up {
     background: color-mix(in srgb, var(--up) 15%, transparent);
@@ -213,8 +209,7 @@
   .sequence .note.current {
     box-shadow: 0 0 0 2px var(--fg);
   }
-  /* Hidden until played, but still clickable via each note's hit strip. */
-  .sequence .note.placeholder { border-color: transparent; cursor: default; }
+  .sequence .note.placeholder { border-color: transparent; }
 
   .heard {
     display: flex;
@@ -324,12 +319,11 @@
   /* Narrow screens: let the 8 note pills shrink to share one row. */
   @media (max-width: 620px) {
     body { padding: 1rem 0.5rem; align-items: stretch; overflow-y: auto; }
-    /* These are all shrink-to-fit flex items by default, so the sequence's
-       width:100% would resolve against its own content. Stretch the chain. */
+    /* Shrink-to-fit by default, so the sequence's width:100% would resolve
+       against its own content. Stretch the chain. */
     #app, .stage, .play-area { width: 100%; }
-    /* The stage fills the height (its own grid handles centring); the results
-       screen is a plain block, so centre it here. `safe` so a tall result
-       still scrolls from the top instead of clipping. */
+    /* The stage centres itself; the results screen is a plain block, so
+       centre it here. `safe` keeps a tall result scrollable from the top. */
     #app {
       height: 100%;
       display: flex;
@@ -337,8 +331,7 @@
       justify-content: safe center;
       align-items: center;
     }
-    /* Equal 1fr rows above and below put the play cluster dead centre on
-       screen and push the option bars into the lower half. */
+    /* Equal 1fr rows put the cluster dead centre, options in the lower half. */
     .stage {
       flex: 1;
       display: grid;
@@ -354,8 +347,7 @@
       flex-wrap: nowrap;
       gap: 0.25rem;
       width: 100%;
-      /* Taller pills crowd the pattern label above, so add the room here
-         rather than letting the row creep upward. */
+      /* Taller pills crowd the pattern label above. */
       margin-top: 0.6rem;
     }
     .sequence .note {
@@ -430,8 +422,8 @@ const patternLabels = { scale: "straight", thirds: "3rds", in3s: "in 3s" };
 const patternOptions = Object.keys(patternLabels);
 
 // ===== Persistence =====
-// store(key, fallback, revive?) → { load, save }. `revive` sanitizes parsed values,
-// returning undefined to fall back to the default.
+// store(key, fallback, revive?) → { load, save }. `revive` returns undefined
+// to reject a stored value and fall back.
 function store(key, fallback, revive) {
   return {
     load() {
@@ -450,8 +442,8 @@ function store(key, fallback, revive) {
 }
 
 const historyStore = store("scales-history-v1", [], v => Array.isArray(v) ? v : undefined);
-// Filter to known ids — an unrecognised mode would throw in activePools and
-// blank the page, which also meant no mode could ever be renamed or removed.
+// Filter to known ids: an unrecognised mode throws in activePools and blanks
+// the page, which would make renaming or removing a mode a breaking change.
 const weightsStore = store("scales-weights-v1", defaultWeights, v => ({
   ...defaultWeights,
   ...Object.fromEntries(Object.entries(v || {}).filter(([m]) => m in MODE)),
@@ -474,7 +466,6 @@ function activePools(w) {
   return pools;
 }
 
-// One of each active-mode scale, shuffled (used for unlimited sessions).
 function buildUnlimitedList(w) {
   const pools = activePools(w);
   const out = [];
@@ -513,7 +504,6 @@ function scaleSpelling(scaleName) {
   const intervals = MODE[mode].scale;
   const root = rootPC[key];
   if (intervals.length !== 7) {
-    // 6-note blues: fall back to flat/sharp preference
     const flats = useFlats(scaleName);
     return intervals.map(iv => noteName(pcMod(root + iv), flats));
   }
@@ -621,16 +611,11 @@ function arp2Seg(ctx) {
 function degNote(ctx, deg) {
   const n = ctx.scale.length;
   const idx = ((deg % n) + n) % n;
-  // Exact octave multiples (8, 15, ...) belong on the octave pill.
   return { pc: ctx.scale[idx], slot: idx === 0 && deg > 0 ? ctx.octaveSlot : idx };
 }
 
-// Pairs a step apart: thirds are step 2. Descending is built from the top
-// down rather than reversed, so it opens 8-6 instead of jumping up to the
-// 9th, and finishes 3-1, 2-7, 1 instead of stopping at 3-1.
-// Walks the scale once per degree and lets `emit` decide what each step
-// plays. `dir` is +1 ascending / -1 descending, so an emit written once works
-// in both directions; the run finishes on the octave or the root.
+// One walk per degree; `emit` decides what each step plays. `dir` is +1 up /
+// -1 down, so a descent mirrors the exercise instead of replaying it backwards.
 function walkSeg(ctx, phase, direction, octaves, emit) {
   const top = ctx.scale.length * octaves;
   const up = direction === "up";
@@ -640,12 +625,10 @@ function walkSeg(ctx, phase, direction, octaves, emit) {
   return segment(ctx, phase, e);
 }
 
-// Pairs a step apart: thirds are step 2.
 const intervalSeg = (ctx, step, phase = "up", direction = "up", octaves = 1) =>
   walkSeg(ctx, phase, direction, octaves,
     (e, d, dir) => e.push(degNote(ctx, d), degNote(ctx, d + dir * step)));
 
-// Runs of consecutive degrees: 1-2-3, 2-3-4, ...
 const groupSeg = (ctx, size, phase = "up", direction = "up", octaves = 1) =>
   walkSeg(ctx, phase, direction, octaves, (e, d, dir) => {
     for (let k = 0; k < size; k++) e.push(degNote(ctx, d + dir * k));
@@ -657,8 +640,7 @@ const patterns = {
     single: ctx => compose([scaleUpSeg(ctx), scaleDownSeg(ctx), arp1Seg(ctx)]),
     double: ctx => {
       const p = compose([scaleUpSeg(ctx), scaleUp2Seg(ctx), scaleDown2Seg(ctx), scaleDownSeg(ctx), arp2Seg(ctx)]);
-      // Both the root and the octave belong to the two-octave ascent, so they
-      // turn turquoise with the rest of it once the path is committed.
+      // Root and octave belong to the two-octave ascent too.
       p.phases[0] = "up2";
       p.phases[ctx.scale.length] = "up2";
       return p;
@@ -760,9 +742,8 @@ function freqToCents(freq) {
 }
 
 // ===== Note tracker: emits a note event on each stable pitch onset =====
-// Gates are relative to the measured noise floor rather than absolute, since
-// input level varies wildly by device (a phone and a laptop hand you very
-// different amplitudes for the same trumpet).
+// Relative to the measured floor, not absolute: input level varies wildly
+// between a phone held close and a laptop across the room.
 const TRACKER = {
   holdMs: 250,       // a pitch must be sustained this long to count as played
   onRatio: 10,       // attack when RMS exceeds this multiple of the floor
@@ -773,8 +754,7 @@ const TRACKER = {
   floorRise: 0.002,  // ...and upward slowly, so it converges on true ambient
 };
 
-// A laptop mic sits further away and hears more of the room than a phone
-// held close, so it needs a higher bar to avoid triggering on noise.
+// A laptop mic hears more of the room than a phone held close.
 const GATE_BOOST = window.matchMedia("(hover: hover)").matches ? 1.8 : 1;
 
 class NoteTracker {
@@ -797,13 +777,9 @@ class NoteTracker {
   process(rms, freq, now) {
     const onGate = this.rmsOn;
     if (this.state === "silent") {
-      // Seed from the very first frame at any level. With no floor the gate
-      // sits at its minimum, so a room louder than that could never satisfy
-      // the "quiet enough to sample" test and would be treated as signal
-      // for the whole session.
+      // Seed at any level, or a room above the minimum gate never gets sampled.
       if (this.noiseFloor === null) this.noiseFloor = rms;
-      // Thereafter only track while genuinely quiet, or the bar climbs in
-      // step with the playing and can never be crossed.
+      // After that only sample when quiet, or the bar climbs with the playing.
       else if (rms < onGate) {
         const a = rms < this.noiseFloor ? TRACKER.floorFall : TRACKER.floorRise;
         this.noiseFloor += (rms - this.noiseFloor) * a;
@@ -819,8 +795,7 @@ class NoteTracker {
     const pc = freq > 0 ? freqToPC(freq) : -1;
     if (pc < 0) return;
 
-    // A new pitch has to hold steady before it counts. This is the whole
-    // anti-gliss rule: a slide passes through pitches far too briefly.
+    // The whole anti-gliss rule: a slide passes through pitches too briefly.
     if (pc !== this.candPC) { this.candPC = pc; this.candSince = now; return; }
     if (pc === this.currentPC) return;                        // already counted
     if (now - this.candSince < TRACKER.holdMs) return;        // not held yet
@@ -846,7 +821,6 @@ class Matcher {
   }
   input(pc, cents = 0) {
     clearTimeout(this.rewindTimer);   // a new note supersedes a pending rewind
-    // At the branch point, choose single or double based on what the player hits.
     if (this.path === null && this.matchIdx === this.expected.branchIdx) {
       if (pc === this.expected.single.pcs[this.matchIdx]) this.path = "single";
       else if (pc === this.expected.double.pcs[this.matchIdx]) this.path = "double";
@@ -861,9 +835,8 @@ class Matcher {
       }
       return;
     }
-    // Going back to a note already played rewinds to just past it, but only
-    // after it survives another hold. Any note arriving first cancels it, so
-    // a stray detection you play straight through never costs you progress.
+    // Rewind to just past an earlier note, but only if it survives a hold —
+    // any note arriving first cancels it, so a stray never costs progress.
     for (let k = this.matchIdx - 1; k >= 0; k--) {
       if (path.pcs[k] === pc) {
         this.rewindTimer = setTimeout(() => {
@@ -876,17 +849,14 @@ class Matcher {
       }
     }
   }
-  // Stops a pending rewind from firing into a matcher that has been replaced.
   cancel() { clearTimeout(this.rewindTimer); }
 }
 
 
-// Let a correct run sit green long enough to register before moving on.
 const SUCCESS_HOLD_MS = 600;
 
 // ===== Audio =====
-// Read a #rrggbb custom property as [r,g,b] so a colour lives in exactly one
-// place — the :root block.
+// Read a #rrggbb custom property as [r,g,b], so colours live only in :root.
 // Tuner: fixed 120x140 viewBox; the letter sits in a masked circle at (cx, baselineY).
 const TUNER = {
   width: 120, height: 140,
@@ -901,7 +871,6 @@ const TUNER = {
 const FLAT_ARC = `M ${TUNER.arcLeft} ${TUNER.baselineY} Q ${TUNER.cx} ${TUNER.baselineY} ${TUNER.arcRight} ${TUNER.baselineY}`;
 
 function tuningArcPath(cents) {
-  // Sharp → bends upward (control point above baseline). Flat → bends downward.
   const c = Math.max(-TUNER.maxCents, Math.min(TUNER.maxCents, cents));
   const controlY = TUNER.baselineY - c * TUNER.bendPerCent;
   return `M ${TUNER.arcLeft} ${TUNER.baselineY} Q ${TUNER.cx} ${controlY.toFixed(1)} ${TUNER.arcRight} ${TUNER.baselineY}`;
@@ -918,9 +887,8 @@ let audioCtx = null, analyser = null, mediaStream = null, audioBuf = null;
 let noteTracker = null;
 let smoothedCents = 0;
 
-// Processing only hurts pitch detection: AGC fights the RMS gate, noise
-// suppression carves out harmonics, echo cancellation adds artifacts. Raw
-// audio is a hard requirement — a browser that won't give it gets no mic.
+// Processing only hurts pitch detection, so raw audio is a hard requirement:
+// a browser that won't give it gets no mic.
 const RAW_AUDIO = {
   echoCancellation: { exact: false },
   noiseSuppression: { exact: false },
@@ -929,9 +897,8 @@ const RAW_AUDIO = {
 
 let micPending = false;
 
-// Getting the stream is safe anywhere, but building the AudioContext is not:
-// iOS hands back a permanently silent graph if it is created outside a user
-// gesture. So ask for permission on load and wire up the graph on first input.
+// The stream is safe to request anywhere; the AudioContext is not — iOS
+// returns a silent graph unless it is built inside a user gesture.
 async function requestMic() {
   if (mediaStream || micPending) return !!mediaStream;
   micPending = true;
@@ -951,7 +918,6 @@ async function requestMic() {
   }
 }
 
-// Call from a user gesture.
 function startAudioGraph() {
   if (audioCtx || !mediaStream) return false;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -989,8 +955,7 @@ function detectLoop() {
   const active = state === "playing" || state === "ready";
   if (noteTracker && active) noteTracker.process(rms, freq, performance.now());
   if (micDebug) {
-    // Dashes stand in at exactly the width of a reading, so the pitch
-    // dropping in and out swaps in place instead of resizing the line.
+    // Same width as a reading, so dropping in and out doesn't resize the line.
     const hz = (freq > 0 ? freq.toFixed(0) + "hz" : "-----").padStart(6);
     micDebug.textContent = `rms ${rms.toFixed(4)} gate ${noteTracker.rmsOn.toFixed(4)}`
       + ` floor ${(noteTracker.noiseFloor ?? 0).toFixed(4)} ${hz}`;
@@ -1004,8 +969,8 @@ function renderTuner(freq, rms) {
   if (!heardEl || !scales[index]) return;
   const textEl = heardEl.querySelector(".heard-text");
   const arcEl = heardEl.querySelector(".tuning-arc");
-  // Follows the live signal rather than the tracker's confirmed note: you
-  // should see the pitch the instant you sound it, even though it takes a
+  // Follows the live signal, not the confirmed note: you should see the pitch
+  // the instant you sound it, even though it takes a
   // full hold before it counts as played.
   const sounding = freq > 0 && rms >= (noteTracker?.rmsOn ?? Infinity) * TRACKER.offRatio;
   if (!sounding) {
@@ -1028,8 +993,8 @@ function renderTuner(freq, rms) {
 }
 
 // ===== App state =====
-// Touch devices skip by tapping; pointer devices skip by keypress only, so a
-// stray click on the page doesn't blow through a scale.
+// Touch skips by tapping; pointer devices by keypress only, so a stray click
+// doesn't blow through a scale.
 const isTouch = () => !window.matchMedia("(hover: hover)").matches;
 const restartHint = () => isTouch()
   ? "<strong>tap</strong> to restart" : "press <strong>key</strong> to restart";
@@ -1324,9 +1289,8 @@ function onSequenceComplete() {
 }
 
 let advanceTimer = null;
-// `cents` present means the tracker matched the whole sequence. Called with
-// nothing, it is a manual advance — a skip however long it took, because
-// nothing verified the scale was played.
+// `cents` means the tracker matched the whole sequence. Without it this is a
+// manual advance: a skip however long it took, since nothing verified it.
 function completeCurrent(cents = pendingCents) {
   // A keypress during the success hold would otherwise advance twice.
   clearTimeout(advanceTimer);
@@ -1492,9 +1456,8 @@ noteTracker = new NoteTracker((pc, cents) => currentMatcher?.input(pc, cents));
 
 start();
 
-// Ask for the mic and bring the graph up straight away on every device.
-// If a browser hands back a suspended/silent context (iOS historically
-// does), ensureAudio() rebuilds it on the first gesture.
+// ensureAudio() rebuilds the graph on first gesture if this one comes back
+// suspended.
 requestMic().then(ok => {
   if (ok && startAudioGraph() && state === "ready") render();
 });
