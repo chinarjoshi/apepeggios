@@ -486,10 +486,10 @@ function noteName(pc, flats) {
   return (flats ? flatNames : sharpNames)[pcMod(pc)];
 }
 
-const LETTERS = ["C", "D", "E", "F", "G", "A", "B"];
-const LETTER_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+const letterPCs = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+const letters = ["C", "D", "E", "F", "G", "A", "B"];
 function spelledName(letter, targetPc) {
-  const base = LETTER_PC[letter];
+  const base = letterPCs[letter];
   let diff = pcMod(targetPc - base);
   if (diff > 6) diff -= 12;
   if (diff === 0) return letter;
@@ -508,10 +508,10 @@ function scaleSpelling(scaleName) {
     return intervals.map(iv => noteName(pcMod(root + iv), flats));
   }
   const rootLetter = key[0];
-  const rootIdx = LETTERS.indexOf(rootLetter);
+  const rootIdx = letters.indexOf(rootLetter);
   return intervals.map((iv, i) => {
     const targetPc = pcMod(root + iv);
-    const letter = LETTERS[(rootIdx + i) % 7];
+    const letter = letters[(rootIdx + i) % 7];
     return spelledName(letter, targetPc);
   });
 }
@@ -1289,12 +1289,13 @@ function onSequenceComplete() {
 }
 
 let advanceTimer = null;
-// `cents` means the tracker matched the whole sequence. Without it this is a
+// Pending cents mean the tracker matched the whole sequence. None means a
 // manual advance: a skip however long it took, since nothing verified it.
-function completeCurrent(cents = pendingCents) {
+function completeCurrent() {
   // A keypress during the success hold would otherwise advance twice.
   clearTimeout(advanceTimer);
   advanceTimer = null;
+  const cents = pendingCents;
   pendingCents = null;
   const now = performance.now();
   // scaleStart is stamped when the first note confirms, so only the other
