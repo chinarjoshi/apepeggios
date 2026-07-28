@@ -71,7 +71,7 @@ function boot({ storage = {}, hover = true, width = 1440, clock = { t: 0 } } = {
       MODES, MODE, keySharpsMajor, MAX_ACCIDENTALS, NOTATIONS,
       buildExpected, scaleSpelling, activePools, buildUnlimitedList,
       useFlats, chordName, scaleContext, patterns,
-      intervalSeg, groupSeg, Matcher, NoteTracker, TRACKER, pendingRewind,
+      intervalSeg, groupSeg, Matcher, NoteTracker, TRACKER, hearsNext,
       autoCorrelate, PITCH, TUNER, weightsStore, defaultWeights,
       get matcher() { return currentMatcher; },
       get times() { return times; },
@@ -151,34 +151,38 @@ check("runs ascend and descend exactly", () => {
      "1 2 3 2 3 4 3 4 5 4 5 6 5 6 7 6 7 8 7 8 2 8", "in3s up");
   eq(asDegrees(c, api.groupSeg(c, 3, "down", "down")),
      "8 7 6 7 6 5 6 5 4 5 4 3 4 3 2 3 2 1 2 1 7 1", "in3s down");
-  // Struck once: a doubled pitch is invisible to the tracker and would stall.
+  // A doubled pitch is invisible to the tracker unless it is released and
+  // struck again, so every repeat has to be skippable or the run stalls.
   for (const pat of ["scale", "thirds", "in3s"])
     for (const which of ["single", "double"]) {
       const p = api.buildExpected("C Major", 0, pat)[which];
-      if (!p) continue;
-      const at = p.pcs.findIndex((v, i) => i > 0 && v === p.pcs[i - 1]);
-      ok(at < 0, `${pat}/${which} repeats a pitch at ${at}`);
+      const at = p.pcs.findIndex((v, i) => i > 0 && v === p.pcs[i - 1] && !p.optional[i]);
+      ok(at < 0, `${pat}/${which} repeats a pitch at ${at} with no way through`);
     }
 });
 
+check("the turnaround may be restruck or slurred through", () => {
+  const e = api.buildExpected("C Major", 0, "thirds");
+  const at = e.single.optional.findIndex(Boolean);
+  eq(e.single.pcs[at], e.single.pcs[at - 1], "the turnaround is not a repeated pitch");
+  const run = slur => {
+    const m = new api.Matcher(e, { onProgress() {}, onSuccess() {} });
+    for (let i = 0; i < at; i++) m.input(e.single.pcs[i], 5);
+    if (!slur) m.input(e.single.pcs[at], 5);   // strike the top note again...
+    m.input(e.single.pcs[at + 1], 5);          // ...or carry straight on down
+    return m;
+  };
+  eq(run(false).matchIdx, at + 2, "restriking the turnaround did not advance");
+  eq(run(true).matchIdx, at + 2, "slurring through the turnaround did not advance");
+  // A note nobody played scores no intonation and owes no hold time.
+  eq(run(true).cents[at], "null", "a slurred note was scored");
+  eq(run(false).cents[at], 5, "a restruck note was not scored");
+});
+
 check("single and double paths diverge only at the branch", () => {
-  for (const [pat, single, double] of [["scale",21,45], ["thirds",29,null], ["in3s",43,null]]) {
+  for (const [pat, single, double] of [["scale",21,45], ["thirds",30,58], ["in3s",44,86]]) {
     const e = api.buildExpected("C Major", 0, pat), b = e.branchIdx;
     eq(e.single.pcs.length, single, `${pat} single length`);
-    // Steps carry the register the pitch classes throw away: they must agree
-    // with the pitches and start on the root.
-    e.single.pcs.forEach((pc, i) => eq((e.single.steps[i] % 12 + 12) % 12, pc,
-      `${pat} step ${e.single.steps[i]} at ${i} is not the pitch played`));
-    eq(e.single.steps[0], 0, `${pat} does not start on the root`);
-    // Nothing leaps further than a fifth; a jump past an octave means some
-    // entry lost the register it was built in.
-    const leapOk = p => p.steps.forEach((st, i) => ok(i === 0 || Math.abs(st - p.steps[i - 1]) <= 12,
-      `${pat} leaps ${Math.abs(st - p.steps[i - 1])} semitones at ${i}`));
-    // Every ascent finishes on the octave, whatever route it took there.
-    const top = p => Math.max(...p.steps.filter((_, i) => p.phases[i].startsWith("up")));
-    leapOk(e.single);
-    ok(top(e.single) >= 12, `${pat} ascent never reaches the octave`);
-    if (double === null) { ok(!e.double, `${pat} should have no second octave`); continue; }
     eq(e.double.pcs.length, double, `${pat} double length`);
     for (let i = 0; i < b; i++)
       eq(e.single.pcs[i], e.double.pcs[i], `${pat} prefix differs at ${i}`);
@@ -190,9 +194,20 @@ check("single and double paths diverge only at the branch", () => {
     ok(e.double.phases[0] === "up2", `${pat} root pill is not part of the ascent`);
     eq(e.double.phases.indexOf("up2", 1), b - 1, `${pat} second octave starts late`);
     ok(!e.single.phases.includes("up2"), `${pat} one-octave run claims a second octave`);
-    e.double.pcs.forEach((pc, i) => eq((e.double.steps[i] % 12 + 12) % 12, pc,
-      `${pat} double step ${e.double.steps[i]} at ${i} is not the pitch played`));
-    leapOk(e.double);
+    // Steps carry the register the pitch classes throw away. They must agree
+    // with the pitches, start on the root, and the two-octave form has to
+    // reach exactly one octave higher than the one-octave form.
+    for (const w of ["single", "double"]) {
+      const p = e[w];
+      p.pcs.forEach((pc, i) => eq((p.steps[i] % 12 + 12) % 12, pc,
+        `${pat}/${w} step ${p.steps[i]} at ${i} is not the pitch played`));
+      eq(p.steps[0], 0, `${pat}/${w} does not start on the root`);
+      // Nothing here leaps further than a fifth; a jump past an octave means
+      // some entry lost the register it was built in.
+      p.steps.forEach((s, i) => ok(i === 0 || Math.abs(s - p.steps[i - 1]) <= 12,
+        `${pat}/${w} leaps ${Math.abs(s - p.steps[i - 1])} semitones at ${i}`));
+    }
+    const top = p => Math.max(...p.steps.filter((_, i) => p.phases[i].startsWith("up")));
     eq(top(e.double) - top(e.single), 12, `${pat} two-octave ascent tops out wrong`);
     const arp = e.double.steps.filter((_, i) => e.double.phases[i] === "arp");
     if (arp.length) eq(Math.max(...arp), top(e.double), `${pat} two-octave arpeggio stops short`);
@@ -223,44 +238,99 @@ check("a correct run completes, keeps its cents, and ignores strays", () => {
   eq(m2.matchIdx, 3, "a stray note disturbed progress");
 });
 
-check("a backward note arms a rewind, and playing on cancels it", () => {
+await checkAsync("a backward note rewinds, unless you play on", async () => {
   const e = api.buildExpected("D Major", 0, "scale");
+  const settle = () => new Promise(r => setTimeout(r, api.TRACKER.holdMs + 80));
+
   const m = new api.Matcher(e, { onProgress() {}, onSuccess() {} });
-  for (let i = 0; i < 4; i++) m.input(e.single.pcs[i], 0, 60 + e.single.steps[i]);
-  ok(!api.pendingRewind.active, "a forward run armed a rewind");
-  m.input(e.single.pcs[1], 0, 60 + e.single.steps[1]);   // back to the second note
-  ok(api.pendingRewind.active, "going backward armed no rewind");
-  m.input(e.single.pcs[4], 0, 60 + e.single.steps[4]);   // played through
-  ok(!api.pendingRewind.active, "a pending rewind was not cancelled");
+  for (let i = 0; i < 4; i++) m.input(e.single.pcs[i], 0);
+  m.input(e.single.pcs[1], 0);                  // back to the second note
+  eq(m.matchIdx, 4, "rewound before the hold elapsed");
+  await settle();
+  eq(m.matchIdx, 2, "did not rewind once the hold elapsed");
+  eq(m.cents.length, 2, "cents not truncated with the rewind");
+
+  // Carrying on cancels it, so a stray played through never costs progress.
+  const m2 = new api.Matcher(e, { onProgress() {}, onSuccess() {} });
+  for (let i = 0; i < 4; i++) m2.input(e.single.pcs[i], 0);
+  m2.input(e.single.pcs[1], 0);                 // arms a rewind
+  m2.input(e.single.pcs[4], 0);                 // ...which this supersedes
+  await settle();
+  eq(m2.matchIdx, 5, "a pending rewind was not cancelled");
 });
 
-check("the second octave is chosen at the branch", () => {
+await checkAsync("the second octave is chosen at the branch, and rechosen", async () => {
   const e = api.buildExpected("C Major", 0, "scale");
-  const play = next => {
+  const upTo = next => {
     const m = new api.Matcher(e, { onProgress() {}, onSuccess() {} });
     for (let i = 0; i < e.branchIdx; i++) m.input(e.single.pcs[i], 0);
     m.input(next, 0);
-    return m.path;
+    return m;
   };
-  eq(play(e.single.pcs[e.branchIdx]), "single", "single path");
-  eq(play(e.double.pcs[e.branchIdx]), "double", "double path");
+  eq(upTo(e.single.pcs[e.branchIdx]).path, "single", "single path");
+  const m = upTo(e.double.pcs[e.branchIdx]);
+  eq(m.path, "double", "double path");
+  // Rewinding behind the fork reopens it, or a flub locks in the octave count.
+  m.input(e.double.pcs[0], 0);
+  await new Promise(r => setTimeout(r, api.TRACKER.holdMs + 80));
+  eq(m.matchIdx, e.branchIdx, "rewound to the wrong place");
+  ok(m.path === null, "the committed path outlived the rewind");
 });
 
 // Pitch classes alone cannot tell the root from the octave above it: playing
-// the 8 after the 6 read as the 1 and rewound the run to the bottom.
-check("register decides what counts as going backward", () => {
+// the 8 after the 6 used to read as the 1 and rewind the run to the bottom.
+await checkAsync("register decides what counts as going backward", async () => {
   const e = api.buildExpected("C Major", 0, "scale");
+  const settle = () => new Promise(r => setTimeout(r, api.TRACKER.holdMs + 80));
   const upToSixth = () => {
     const m = new api.Matcher(e, { onProgress() {}, onSuccess() {} });
     for (let i = 0; i < 6; i++) m.input(e.single.pcs[i], 0, 60 + e.single.steps[i]);
-    eq(m.matchIdx, 6, "did not reach the sixth");
     return m;
   };
-  upToSixth().input(e.single.pcs[0], 0, 72);   // the root, an octave up
-  ok(!api.pendingRewind.active, "the octave above the root armed a rewind to the bottom");
-  upToSixth().input(e.single.pcs[0], 0, 60);   // the root they actually played
-  ok(api.pendingRewind.active, "a genuine return to the root no longer rewinds");
-  api.pendingRewind.cancel();
+  const up = upToSixth();
+  eq(up.matchIdx, 6, "did not reach the sixth");
+  up.input(e.single.pcs[0], 0, 72);      // the root, an octave above where it started
+  await settle();
+  eq(up.matchIdx, 6, "the octave above the root rewound the run to the bottom");
+
+  const back = upToSixth();
+  back.input(e.single.pcs[0], 0, 60);    // the root they actually played
+  await settle();
+  eq(back.matchIdx, 1, "a genuine return to the root no longer rewinds");
+});
+
+check("the second octave can be abandoned mid-climb", () => {
+  const e = api.buildExpected("C Major", 0, "scale");
+  let done = false;
+  const m = new api.Matcher(e, { onProgress() {}, onSuccess() { done = true; } });
+  const play = i => m.input(e.double.pcs[i], 0, 60 + e.double.steps[i]);
+  for (let i = 0; i <= e.branchIdx + 2; i++) play(i);
+  eq(m.path, "double", "did not commit to two octaves");
+  ok(e.double.steps[m.matchIdx] > 12, "not actually up in the second octave");
+
+  m.input(e.single.pcs[e.branchIdx - 1], 0, 72);   // back down to the octave
+  eq(m.path, "single", "turning back did not drop to one octave");
+  eq(m.matchIdx, e.branchIdx, "rejoined the one-octave path in the wrong place");
+  eq(m.cents.length, e.branchIdx, "cents kept notes from the abandoned octave");
+
+  for (let i = e.branchIdx; i < e.single.pcs.length; i++)
+    m.input(e.single.pcs[i], 0, 60 + e.single.steps[i]);
+  ok(done, "the abandoned run never completed as a one-octave run");
+});
+
+check("the expected note previews before it locks in", () => {
+  const e = api.buildExpected("C Major", 0, "scale");
+  const m = new api.Matcher(e, { onProgress() {}, onSuccess() {} });
+  ok(api.hearsNext(m, 60), "the first note does not preview");
+  ok(!api.hearsNext(m, 61), "a wrong pitch previews");
+  eq(m.matchIdx, 0, "previewing advanced the run");
+  m.input(e.single.pcs[0], 0, 60);
+  ok(api.hearsNext(m, 62), "the second note does not preview");
+  ok(!api.hearsNext(m, 74), "previewed a pitch an octave out of register");
+  // At the top the octave and the root share a pitch class.
+  for (let i = 1; i < 7; i++) m.input(e.single.pcs[i], 0, 60 + e.single.steps[i]);
+  ok(api.hearsNext(m, 72), "the octave does not preview at the top");
+  ok(!api.hearsNext(m, 60), "the root previewed as the octave");
 });
 
 // ----------------------------------------------------------------- tracker
@@ -279,18 +349,26 @@ check("the gate adapts to the room", () => {
   ok(t.rmsOn > q.rmsOn, "desktop gate should exceed touch");
 });
 
-check("a pitch counts only once it is stable", () => {
-  const heard = [];
-  const t = new api.NoteTracker(pc => heard.push(pc));
-  const tone = midi => 440 * Math.pow(2, (midi - 69) / 12);
-  t.process(0.2, tone(69));                    // one frame is not enough
-  eq(heard.length, 0, "a single frame counted as a note");
-  t.process(0.2, tone(69));
-  eq(heard, [9], "a stable pitch did not register");
-  t.process(0.2, tone(69));
-  eq(heard, [9], "a held note fired twice");
-  eq(t.state, "playing", "never left silence");
-  t.process(0.0001, tone(69));
+check("only sustained pitches count", () => {
+  const sweep = (fn, frames, midiAt) => {
+    const heard = [];
+    const t = new api.NoteTracker(pc => heard.push(pc));
+    for (let i = 0; i < frames; i++)
+      t.process(0.2, 440 * Math.pow(2, (midiAt(i) - 69) / 12), i * 16);
+    fn(heard, t);
+    return t;
+  };
+  // 80ms per semitone: a slow slide, and only just under the 100ms hold.
+  sweep(h => eq(h.length, 0, `gliss produced ${h.length} notes: ${h}`),
+        65, i => 60 + Math.floor(i / 5));
+  sweep((h, t) => { eq(h, [9], "A should fire once"); eq(t.state, "playing", "never left silence"); },
+        120, () => 69);
+  sweep(h => eq(h, [0, 2, 4, 5, 7], "held notes out of order"),
+        200, i => [60, 62, 64, 65, 67][Math.floor(i / 40)]);
+  const t = new api.NoteTracker(() => {});
+  for (let i = 0; i < 40; i++) t.process(0.2, 440, i * 16);
+  eq(t.state, "playing", "note never registered");
+  t.process(0.0001, 440, 700);
   eq(t.state, "silent", "release gate never fired");
 });
 
@@ -335,12 +413,11 @@ await checkAsync("a completed scale records its intonation", async () => {
   const m = a.matcher;
   ok(m, "no matcher after boot");
   const pcs = m.expected.single.pcs;
-  // One note could be noise; the second correct one starts the clock.
   m.input(pcs[0], 11);
-  m.input(pcs[1], 11);
-  eq(a.state, "playing", "a second correct note did not start the run");
-  clock.t = 11_000;   // past MIN_SCALE_MS
-  for (let i = 2; i < pcs.length; i++) m.input(pcs[i], 11);
+  eq(a.state, "playing", "run did not start on the first note");
+  // Just past the derived floor, so this fails if it drifts either way.
+  clock.t = 21 * api.TRACKER.holdMs;
+  for (let i = 1; i < pcs.length; i++) m.input(pcs[i], 11);
   await new Promise(r => setTimeout(r, 700));
   const rec = a.times[0];
   ok(rec, "nothing was recorded");
@@ -352,14 +429,13 @@ await checkAsync("a completed scale records its intonation", async () => {
 });
 
 await checkAsync("runs that cannot have been played are not recorded", async () => {
-  // Faster than anyone plays a scale and an arpeggio: a spurious match.
+  // Faster than every note could have been held: a spurious match.
   const clock = { t: 0 };
   const a = boot({ clock });
   const pcs = a.matcher.expected.single.pcs;
   a.matcher.input(pcs[0], 5);
-  a.matcher.input(pcs[1], 5);
-  clock.t = 4_000;                            // well under MIN_SCALE_MS
-  for (let i = 2; i < pcs.length; i++) a.matcher.input(pcs[i], 5);
+  clock.t = 10 * api.TRACKER.holdMs;          // half the notes' worth of time
+  for (let i = 1; i < pcs.length; i++) a.matcher.input(pcs[i], 5);
   await new Promise(r => setTimeout(r, 700));
   eq(a.times.length, 0, "an impossibly fast run was recorded");
 
@@ -367,7 +443,6 @@ await checkAsync("runs that cannot have been played are not recorded", async () 
   const c2 = { t: 0 };
   const b = boot({ clock: c2 });
   b.matcher.input(b.matcher.expected.single.pcs[0], 0);
-  b.matcher.input(b.matcher.expected.single.pcs[1], 0);
   c2.t = 60_000;
   b.completeCurrent();
   eq(b.times.length, 0, "a manual advance was counted as a result");

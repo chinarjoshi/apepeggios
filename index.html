@@ -557,18 +557,19 @@ function segment(ctx, phase, entries) {
   };
 }
 function compose(segments) {
-  const pcs = [], slots = [], steps = [], phases = [];
+  const pcs = [], slots = [], steps = [], phases = [], optional = [];
   for (const seg of segments) {
-    // An ascent ending on the octave meets a descent starting there; the
-    // turnaround note is played once, not struck twice. A doubled pitch is
-    // invisible to a tracker that fires on pitch change.
-    const from = pcs.length && seg.pcs[0] === pcs[pcs.length - 1] ? 1 : 0;
-    for (let i = from; i < seg.pcs.length; i++) {
+    // An ascent ending on the octave meets a descent starting there. The
+    // exercise says to rearticulate it, and a release-and-attack is audible
+    // to the tracker — but slurring through is fine, so the repeat is
+    // skippable rather than dropped.
+    if (pcs.length && seg.pcs[0] === pcs[pcs.length - 1]) optional[pcs.length] = true;
+    for (let i = 0; i < seg.pcs.length; i++) {
       pcs.push(seg.pcs[i]); slots.push(seg.slots[i]);
       steps.push(seg.steps[i]); phases.push(seg.phases[i]);
     }
   }
-  return { pcs, slots, steps, phases };
+  return { pcs, slots, steps, phases, optional };
 }
 
 // ----- Scale segments -----
@@ -627,8 +628,8 @@ function degNote(ctx, deg) {
 
 // One walk per degree; `emit` decides what each step plays. `dir` is +1 up /
 // -1 down, so a descent mirrors the exercise instead of replaying it backwards.
-function walkSeg(ctx, phase, direction, emit) {
-  const top = ctx.scale.length;
+function walkSeg(ctx, phase, direction, octaves, emit) {
+  const top = ctx.scale.length * octaves;
   const up = direction === "up";
   const e = [];
   for (let d = up ? 0 : top; up ? d < top : d > 0; up ? d++ : d--) emit(e, d, up ? 1 : -1);
@@ -636,12 +637,12 @@ function walkSeg(ctx, phase, direction, emit) {
   return segment(ctx, phase, e);
 }
 
-const intervalSeg = (ctx, step, phase = "up", direction = "up") =>
-  walkSeg(ctx, phase, direction,
+const intervalSeg = (ctx, step, phase = "up", direction = "up", octaves = 1) =>
+  walkSeg(ctx, phase, direction, octaves,
     (e, d, dir) => e.push(degNote(ctx, d), degNote(ctx, d + dir * step)));
 
-const groupSeg = (ctx, size, phase = "up", direction = "up") =>
-  walkSeg(ctx, phase, direction, (e, d, dir) => {
+const groupSeg = (ctx, size, phase = "up", direction = "up", octaves = 1) =>
+  walkSeg(ctx, phase, direction, octaves, (e, d, dir) => {
     for (let k = 0; k < size; k++) e.push(degNote(ctx, d + dir * k));
   });
 
@@ -649,18 +650,22 @@ const groupSeg = (ctx, size, phase = "up", direction = "up") =>
 const patterns = {
   scale: {
     single: ctx => compose([scaleUpSeg(ctx), scaleDownSeg(ctx), arp1Seg(ctx)]),
-    double: ctx => {
-      const p = compose([scaleUpSeg(ctx), scaleUp2Seg(ctx), scaleDown2Seg(ctx),
-                         scaleDownSeg(ctx), arp2Seg(ctx)]);
-      // Root and octave belong to the two-octave ascent too.
-      p.phases[0] = "up2";
-      p.phases[ctx.scale.length] = "up2";
-      return p;
-    },
+    double: ctx => compose([scaleUpSeg(ctx), scaleUp2Seg(ctx), scaleDown2Seg(ctx),
+                            scaleDownSeg(ctx), arp2Seg(ctx)]),
     branchIdx: ctx => ctx.scale.length + 1,
   },
-  thirds:  { single: ctx => compose([intervalSeg(ctx, 2, "up"), intervalSeg(ctx, 2, "down", "down")]) },
-  in3s:    { single: ctx => compose([groupSeg(ctx, 3, "up"),    groupSeg(ctx, 3, "down", "down")]) },
+  thirds: {
+    single: ctx => compose([intervalSeg(ctx, 2, "up"), intervalSeg(ctx, 2, "down", "down")]),
+    double: ctx => compose([intervalSeg(ctx, 2, "up", "up", 2),
+                            intervalSeg(ctx, 2, "down", "down", 2)]),
+    branchIdx: ctx => ctx.scale.length * 2 + 1,
+  },
+  in3s: {
+    single: ctx => compose([groupSeg(ctx, 3, "up"), groupSeg(ctx, 3, "down", "down")]),
+    double: ctx => compose([groupSeg(ctx, 3, "up", "up", 2),
+                            groupSeg(ctx, 3, "down", "down", 2)]),
+    branchIdx: ctx => ctx.scale.length * 3 + 1,
+  },
 };
 
 function buildExpected(scaleName, transposeSemi = 0, patternKey = "scale") {
@@ -669,6 +674,13 @@ function buildExpected(scaleName, transposeSemi = 0, patternKey = "scale") {
   const single = pat.single(ctx);
   const double = pat.double ? pat.double(ctx) : null;
   const branchIdx = double && pat.branchIdx ? pat.branchIdx(ctx) : null;
+  // The two-octave ascent takes its own colour from the fork back one: the
+  // octave note is the last one both paths share, and it opens the second
+  // octave. The root goes with it, since nothing revisits its pill going up.
+  if (double && branchIdx) {
+    for (let i = branchIdx - 1; double.phases[i]?.startsWith("up"); i++) double.phases[i] = "up2";
+    double.phases[0] = "up2";
+  }
   return {
     single, double, branchIdx,
     displayNames: ctx.displayNames,
@@ -747,7 +759,7 @@ function freqToCents(freq) {
 // Relative to the measured floor, not absolute: input level varies wildly
 // between a phone held close and a laptop across the room.
 const TRACKER = {
-  stability: 2,      // consecutive frames on the same pitch before it counts as a note
+  holdMs: 100,       // a pitch must be sustained this long to count as played
   onRatio: 10,       // attack when RMS exceeds this multiple of the floor
   offRatio: 0.4,     // release when RMS drops below this fraction of the attack gate
   minOn: 0.006,      // absolute floor so a silent room doesn't trigger on nothing
@@ -760,65 +772,51 @@ const TRACKER = {
 const GATE_BOOST = window.matchMedia("(hover: hover)").matches ? 1.8 : 1;
 
 class NoteTracker {
-  constructor(onNote, onSilence) {
+  constructor(onNote) {
     this.onNote = onNote;
-    this.onSilence = onSilence || (() => {});
     this.reset();
-    this.STABILITY = TRACKER.stability;
     this.noiseFloor = null;
   }
   reset() {
     this.state = "silent";
     this.currentPC = -1;
     this.candPC = -1;
-    this.candCount = 0;
+    this.candSince = 0;
   }
   get rmsOn() {
     const scaled = (this.noiseFloor ?? 0) * TRACKER.onRatio * GATE_BOOST;
     return Math.min(TRACKER.maxOn * GATE_BOOST,
                     Math.max(TRACKER.minOn * GATE_BOOST, scaled));
   }
-  process(rms, freq) {
-    // Only sample the ambient floor between notes; fall fast, rise slow.
+  process(rms, freq, now) {
+    const onGate = this.rmsOn;
     if (this.state === "silent") {
+      // Seed at any level, or a room above the minimum gate never gets sampled.
       if (this.noiseFloor === null) this.noiseFloor = rms;
-      const a = rms < this.noiseFloor ? TRACKER.floorFall : TRACKER.floorRise;
-      this.noiseFloor += (rms - this.noiseFloor) * a;
-      // Sustained sound must not be mistaken for room noise, or the gate
-      // chases the signal upward and can never be crossed.
+      // After that only sample when quiet, or the bar climbs with the playing.
+      else if (rms < onGate) {
+        const a = rms < this.noiseFloor ? TRACKER.floorFall : TRACKER.floorRise;
+        this.noiseFloor += (rms - this.noiseFloor) * a;
+      }
       this.noiseFloor = Math.min(this.noiseFloor, TRACKER.maxOn / TRACKER.onRatio);
     }
-    const onGate = this.rmsOn;
     if (this.state === "playing" && rms < onGate * TRACKER.offRatio) {
-      this.state = "silent"; this.currentPC = -1; this.candPC = -1; this.candCount = 0;
-      this.onSilence();
+      this.state = "silent"; this.currentPC = -1; this.candPC = -1;
       return;
     }
     if (this.state === "silent" && rms < onGate) return;
-    // Carries the register, so the matcher can tell the octave from the root.
+
     const midi = freq > 0 ? Math.round(freqToMidi(freq)) : -1;
     if (midi < 0) return;
     const pc = pcMod(midi);
-    const cents = freqToCents(freq);
 
-    if (this.state === "silent") {
-      if (this.candPC === pc) this.candCount++;
-      else { this.candPC = pc; this.candCount = 1; }
-      if (this.candCount >= this.STABILITY) {
-        this.state = "playing"; this.currentPC = pc;
-        this.candPC = -1; this.candCount = 0;
-        this.onNote(pc, cents, midi);
-      }
-    } else {
-      if (pc === this.currentPC) { this.candPC = -1; this.candCount = 0; }
-      else if (pc === this.candPC) {
-        this.candCount++;
-        if (this.candCount >= this.STABILITY) {
-          this.currentPC = pc; this.candPC = -1; this.candCount = 0;
-          this.onNote(pc, cents, midi);
-        }
-      } else { this.candPC = pc; this.candCount = 1; }
-    }
+    // The whole anti-gliss rule: a slide passes through pitches too briefly.
+    if (pc !== this.candPC) { this.candPC = pc; this.candSince = now; return; }
+    if (pc === this.currentPC) return;                        // already counted
+    if (now - this.candSince < TRACKER.holdMs) return;        // not held yet
+    this.state = "playing";
+    this.currentPC = pc;
+    this.onNote(pc, freqToCents(freq), midi);
   }
 }
 
@@ -830,6 +828,7 @@ class Matcher {
     this.cents = [];
     this.path = null;  // "single" or "double"; decided at branchIdx
     this.baseMidi = null;   // register of the first note, so steps are relative
+    this.rewindTimer = null;
     this.onProgress = onProgress;
     this.onSuccess = onSuccess;
   }
@@ -839,7 +838,7 @@ class Matcher {
   // `midi` places the note in a register; without it only the pitch class is
   // known, and the root is indistinguishable from the octave above it.
   input(pc, cents = 0, midi = null) {
-    pendingRewind.cancel();
+    clearTimeout(this.rewindTimer);   // a new note supersedes a pending rewind
     if (this.matchIdx === 0 && midi !== null) this.baseMidi = midi;
     const step = midi !== null && this.baseMidi !== null ? midi - this.baseMidi : null;
     if (this.path === null && this.matchIdx === this.expected.branchIdx) {
@@ -856,21 +855,45 @@ class Matcher {
       }
       return;
     }
-    // Backward search on the committed (or default single) path. Register
-    // matters here: the octave above the root is not the root.
+    // Carrying on instead of restriking the turnaround: skip it and match
+    // the note they actually played. Nothing scores the missing strike.
+    if (path.optional?.[this.matchIdx] && pc === path.pcs[this.matchIdx + 1]) {
+      this.cents.push(null);
+      this.matchIdx++;
+      return this.input(pc, cents, midi);
+    }
+    // Giving up on the second octave: dropping back to the octave rejoins the
+    // one-octave path at the fork, so the run still finishes — as one octave.
+    if (this.path === "double" && step === 12
+        && path.steps[this.matchIdx] > 12 && path.phases[this.matchIdx].startsWith("up")) {
+      this.path = "single";
+      this.matchIdx = this.expected.branchIdx;
+      this.cents.length = this.matchIdx;
+      this.cents[this.matchIdx - 1] = cents;
+      this.onProgress();
+      return;
+    }
+    // Rewind to just past an earlier note, but only if it survives a hold —
+    // any note arriving first cancels it, so a stray never costs progress.
+    // Register matters here: the octave above the root is not the root.
     for (let k = this.matchIdx - 1; k >= 0; k--) {
       if (path.pcs[k] === pc && (step === null || path.steps[k] === step)) {
-        pendingRewind.arm({ pc, rewindTo: k + 1, cents });
+        this.rewindTimer = setTimeout(() => {
+          this.cents.length = k + 1;
+          this.cents[k] = cents;
+          this.matchIdx = k + 1;
+          // Back before the fork, so the octave count is open again.
+          if (this.matchIdx <= this.expected.branchIdx) this.path = null;
+          this.onProgress();
+        }, TRACKER.holdMs);
         return;
       }
     }
   }
+  cancel() { clearTimeout(this.rewindTimer); }
 }
 
 
-// Nobody plays a full scale + arpeggio faster than this, so anything quicker
-// is a manual skip (or a spurious detection) and is left out of the stats.
-const MIN_SCALE_MS = 10_000;
 const SUCCESS_HOLD_MS = 600;
 
 // ===== Audio =====
@@ -903,17 +926,6 @@ let micError = "";
 let audioCtx = null, analyser = null, mediaStream = null, audioBuf = null;
 let noteTracker = null;
 let smoothedCents = 0;
-const HOLD_MS = 500;
-function holdTimer(ms, onFire) {
-  let timer = null;
-  return {
-    arm(data) { this.cancel(); timer = setTimeout(() => { timer = null; onFire(data); }, ms); },
-    cancel() { if (timer !== null) { clearTimeout(timer); timer = null; } },
-    get active() { return timer !== null; },
-  };
-}
-// Populated once state/matcher globals are defined below.
-let pendingStart, pendingRewind;
 
 // Processing only hurts pitch detection, so raw audio is a hard requirement:
 // a browser that won't give it gets no mic.
@@ -981,14 +993,14 @@ function detectLoop() {
   analyser.getFloatTimeDomainData(audioBuf);
   const { freq, rms } = autoCorrelate(audioBuf, audioCtx.sampleRate);
   const active = state === "playing" || state === "ready";
-  if (noteTracker && active) noteTracker.process(rms, freq);
+  if (noteTracker && active) noteTracker.process(rms, freq, performance.now());
   if (micDebug && noteTracker) {
     // Same width as a reading, so dropping in and out doesn't resize the line.
     const hz = (freq > 0 ? freq.toFixed(0) + "hz" : "-----").padStart(6);
     micDebug.textContent = `rms ${rms.toFixed(4)} gate ${noteTracker.rmsOn.toFixed(4)}`
       + ` floor ${(noteTracker.noiseFloor ?? 0).toFixed(4)} ${hz}`;
   }
-  if (active) renderTuner(freq, rms);
+  if (active) { renderTuner(freq, rms); renderPreview(freq, rms); }
   requestAnimationFrame(detectLoop);
 }
 
@@ -1242,37 +1254,19 @@ function refreshPlayArea() {
 }
 
 function setupMatcher(exp) {
+  currentMatcher?.cancel();
   noteTracker?.reset();
-  pendingStart.cancel();
   if (!exp) { currentMatcher = null; return; }
   currentMatcher = new Matcher(exp, {
     onProgress() {
       updateSequenceUI();
-      if (state !== "ready") return;
-      // One note could be noise, so wait for a sustain; a second correct note
-      // is proof enough on its own.
-      if (currentMatcher.matchIdx === 1) pendingStart.arm(exp.single.pcs[0]);
-      else { pendingStart.cancel(); beginPlaying(); }
+      // The tracker only reports sustained pitches, so the first one to
+      // arrive is already proof of real playing.
+      if (state === "ready") beginPlaying();
     },
     onSuccess: onSequenceComplete,
   });
 }
-
-// Defined here so they close over updateSequenceUI / beginPlaying.
-pendingStart = holdTimer(HOLD_MS, (pc) => {
-  if (noteTracker?.state === "playing" && noteTracker.currentPC === pc) beginPlaying();
-});
-pendingRewind = holdTimer(HOLD_MS, ({ pc, rewindTo, cents }) => {
-  if (!currentMatcher) return;
-  if (noteTracker?.state === "playing" && noteTracker.currentPC === pc) {
-    currentMatcher.cents.length = rewindTo;
-    currentMatcher.cents[rewindTo - 1] = cents;
-    currentMatcher.matchIdx = rewindTo;
-    // Back before the fork, so the octave count is open again.
-    if (rewindTo <= currentMatcher.expected.branchIdx) currentMatcher.path = null;
-    updateSequenceUI();
-  }
-});
 
 function beginPlaying() {
   if (state !== "ready" || nothingSelected()) return;
@@ -1287,9 +1281,13 @@ function beginPlaying() {
   tickTimer();
 }
 
-function updateSequenceUI() {
+// `ahead` of 1 draws the row as though the note now sounding had already been
+// held long enough to count. Same paint, one index further on.
+let previewing = false;
+function updateSequenceUI(ahead = 0) {
   if (!currentMatcher) return;
-  const matchIdx = currentMatcher.matchIdx;
+  previewing = ahead > 0;
+  const matchIdx = currentMatcher.matchIdx + ahead;
   const path = currentMatcher.currentPath();
   document.querySelectorAll(".sequence .note").forEach(n => {
     n.classList.remove("phase-up", "phase-up2", "phase-down", "phase-arp", "current");
@@ -1314,12 +1312,31 @@ function updateSequenceUI() {
   }
 }
 
+// Is this live pitch the note being waited on? Register included, or the
+// octave above the root reads as the root.
+function hearsNext(m, midi) {
+  const path = m.currentPath();
+  if (pcMod(midi) !== path.pcs[m.matchIdx]) return false;
+  const step = m.baseMidi === null ? null : midi - m.baseMidi;
+  return step === null || step === path.steps[m.matchIdx];
+}
+
+// Show the expected note the instant it sounds, ahead of the hold that makes
+// it count. Only repaints on the edges, since this runs every frame.
+function renderPreview(freq, rms) {
+  const sounding = freq > 0 && rms >= (noteTracker?.rmsOn ?? Infinity) * TRACKER.offRatio;
+  const ahead = sounding && currentMatcher
+    && hearsNext(currentMatcher, Math.round(freqToMidi(freq))) ? 1 : 0;
+  if (!!ahead !== previewing) updateSequenceUI(ahead);
+}
+
 // Held across the success hold so that advancing by hand during it still
 // records the run — the playing already happened.
 let pendingCents = null;
 
 function onSequenceComplete() {
   pendingCents = currentMatcher?.cents ?? [];
+  currentMatcher?.cancel();
   currentMatcher = null;
   const scaleEl = document.querySelector(".scale");
   if (scaleEl) scaleEl.classList.add("success");
@@ -1337,8 +1354,13 @@ function completeCurrent() {
   const cents = pendingCents;
   pendingCents = null;
   const now = performance.now();
+  // scaleStart is stamped when the first note confirms, so only the other
+  // N-1 have to wait out the hold. A genuine run cannot beat that, which
+  // makes anything faster a spurious match rather than a performance. Notes
+  // slurred past are null and never had to be held.
   const cList = cents ? cents.filter(c => typeof c === "number") : [];
-  if (cents && now - scaleStart >= MIN_SCALE_MS) {
+  const floorMs = Math.max(0, cList.length - 1) * TRACKER.holdMs;
+  if (cents && now - scaleStart >= floorMs) {
     times.push({
       scale: scales[index],
       ms: now - scaleStart,
@@ -1488,10 +1510,7 @@ async function ensureAudio() {
   document.addEventListener(evt, ensureAudio, { passive: true })
 );
 
-noteTracker = new NoteTracker(
-  (pc, cents, midi) => currentMatcher?.input(pc, cents, midi),
-  () => { pendingStart.cancel(); pendingRewind.cancel(); },
-);
+noteTracker = new NoteTracker((pc, cents, midi) => currentMatcher?.input(pc, cents, midi));
 
 start();
 
