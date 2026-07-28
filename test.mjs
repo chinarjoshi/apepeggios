@@ -79,7 +79,7 @@ function boot({ storage = {}, hover = true, width = 1440, clock = { t: 0 } } = {
     ;globalThis.__api = {
       MODES, MODE, keySharpsMajor, MAX_ACCIDENTALS, NOTATIONS,
       buildExpected, scaleSpelling, activePools, buildUnlimitedList,
-      useFlats, signatureOf, chordName, scaleContext, patterns,
+      useFlats, chordName, scaleContext, patterns,
       intervalSeg, groupSeg, Matcher, NoteTracker, TRACKER,
       autoCorrelate, PITCH, TUNER, weightsStore, defaultWeights,
       get matcher() { return currentMatcher; },
@@ -103,9 +103,12 @@ if (!api) { console.error("boot failed; aborting"); process.exit(1); }
 // The bug this project started from: D♭ minor would need 8 flats.
 check("key signatures stay inside seven accidentals", () => {
   for (const m of api.MODES)
-    for (const name of api.activePools({ [m.id]: 1 })[m.id])
-      ok(Math.abs(api.signatureOf(name)) <= api.MAX_ACCIDENTALS,
-         `${name} needs ${api.signatureOf(name)}`);
+    for (const [key, sig] of Object.entries(api.keySharpsMajor)) {
+      const name = `${key} ${m.id}`;
+      if (!api.activePools({ [m.id]: 1 })[m.id].includes(name)) continue;
+      ok(Math.abs(sig + m.offset) <= api.MAX_ACCIDENTALS,
+         `${name} needs ${sig + m.offset}`);
+    }
   const minor = api.activePools({ Minor: 1 }).Minor;
   for (const bad of ["D♭ Minor", "G♭ Minor", "C♭ Minor"])
     ok(!minor.includes(bad), `${bad} should not be offered`);

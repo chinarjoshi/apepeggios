@@ -51,6 +51,7 @@
     font-weight: 500;
     letter-spacing: -0.01em;
     user-select: none;
+    text-decoration: none;
   }
   .brand .trumpet {
     display: inline-block;
@@ -370,10 +371,10 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">
+  <a class="brand" href="/" aria-label="apepeggios">
     <span class="trumpet" aria-hidden="true"></span>
     <span class="wordmark"><span class="ape">ape</span><span class="peggios">peggios</span></span>
-  </div>
+  </a>
   <button id="mic-warn" class="mic-warn">unmute mic</button>
   <span id="mic-debug" class="mic-debug"></span>
 </header>
@@ -485,12 +486,11 @@ function buildUnlimitedList(w) {
   return out;
 }
 
-// Sharps in this mode's signature; negative means flats.
-function signatureOf(name) {
+// Flats when this mode's key signature is on the flat side of the circle.
+function useFlats(name) {
   const [key, mode] = name.split(" ");
-  return keySharpsMajor[key] + MODE[mode].offset;
+  return keySharpsMajor[key] + MODE[mode].offset < 0;
 }
-const useFlats = name => signatureOf(name) < 0;
 function noteName(pc, flats) {
   return (flats ? flatNames : sharpNames)[pcMod(pc)];
 }
@@ -1469,7 +1469,7 @@ document.addEventListener("keydown", (e) => {
 
 document.addEventListener("click", (e) => {
   if (!isTouch()) return;
-  if (e.target.closest("button, a, input, select, .brand")) return;
+  if (e.target.closest("button, a, input, select")) return;
   advanceFromInput();
 });
 
