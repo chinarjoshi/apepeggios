@@ -1,0 +1,619 @@
+:root {
+  --bg: #1a1a1a;
+  --fg: #e0e0e0;
+  --muted: #666;
+  --dim: #333;
+  --surface: #242424;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --up: #6db4ee;
+  --up2: #58d8c9;
+  --accent: #ffd866;
+  --good: #8dd88d;
+  --bad: #ff6b6b;
+}
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.topbar {
+  position: fixed;
+  top: 1.25rem;
+  left: 1.5rem;
+  right: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 10;
+  /* Full width, so let clicks through the empty middle. */
+  pointer-events: none;
+}
+.topbar > * {
+  pointer-events: auto;
+}
+.mic-debug {
+  font-family: var(--mono);
+  white-space: pre; /* keep the padStart alignment; HTML collapses runs of spaces */
+  font-size: 0.65rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  font-family:
+    "Lexend Deca",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 1.75rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  user-select: none;
+  text-decoration: none;
+  min-width: 0;
+}
+.brand .trumpet {
+  display: inline-block;
+  width: 44px;
+  height: 44px;
+  background: var(--accent);
+  -webkit-mask: url("logo.png") center/contain no-repeat;
+  mask: url("logo.png") center/contain no-repeat;
+  transform: translateY(-3px);
+}
+.brand .wordmark {
+  margin-left: -0.4rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brand .ape {
+  color: var(--accent);
+}
+.brand .peggios {
+  color: var(--muted);
+}
+/* Locked: a stray drag would scroll instead of tapping. dvh tracks the address bar. */
+html,
+body {
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--mono);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  /* Drops the double-tap-to-zoom delay; pinch zoom still works. */
+  touch-action: manipulation;
+}
+/* Results is the one view that runs long, so only it scrolls. */
+#app {
+  max-height: 100%;
+}
+#app:has(.results) {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 100%;
+}
+/* Not a stage gap: this grows the mobile auto row, so the space comes from above. */
+.play-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+}
+.scale {
+  /* fitChordSize(): largest size the longest possible name still fits at. */
+  font-size: var(--scale-size, 3.5rem);
+  white-space: nowrap;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+  transition: color 0.15s;
+}
+.scale.success {
+  color: var(--good);
+}
+.mode-label {
+  color: var(--muted);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.scale-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+.scale-title .scale {
+  margin-bottom: 0.8rem;
+}
+.hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.hint strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+.stats {
+  display: flex;
+  gap: 3rem;
+  color: var(--muted);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+/* Fixed width per field, so 9 -> 10 doesn't shift the centred row. */
+.stats strong {
+  color: var(--fg);
+  font-weight: 500;
+  display: inline-block;
+  text-align: right;
+}
+.stats .stat-count strong {
+  min-width: var(--count-w, 2ch);
+}
+/* Layers share one grid cell so swapping them never shifts the page. */
+.swap {
+  display: grid;
+}
+.swap > .layer {
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  transition: opacity 0.3s ease;
+}
+.swap > .layer.faded {
+  opacity: 0;
+  pointer-events: none;
+}
+.widget-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.mode-toggles {
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 40rem;
+}
+.option-bar {
+  display: flex;
+  gap: 0.1rem;
+  justify-content: center;
+  align-items: center;
+  background: var(--surface);
+  border-radius: 5px;
+  padding: 0.3rem 0.55rem;
+}
+.option-icon {
+  color: var(--muted);
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  padding-right: 0.4rem;
+  justify-content: center;
+}
+.option-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+.option-icon.icon-sun svg,
+.option-icon.icon-moon svg {
+  width: 15px;
+  height: 15px;
+}
+.option-icon.icon-moon {
+  padding-right: 0;
+  padding-left: 0.4rem;
+}
+.option-icon.icon-clef {
+  font-family: "Bravura Text", "Segoe UI Symbol", "Apple Symbols", serif;
+  font-size: 1.9rem;
+  line-height: 0.6;
+  transform: translate(-1px, 1px);
+}
+.option-bar button {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  padding: 0.1rem 0.5rem;
+  font-family: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+  border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  transition: color 0.1s;
+}
+/* On touch, hover sticks after a tap and the toggle looks unchanged. */
+@media (hover: hover) {
+  .option-bar button:hover {
+    color: var(--fg);
+  }
+}
+.option-bar button.selected {
+  color: var(--accent);
+}
+.option-bar button:active {
+  transform: scale(0.94);
+}
+
+.sequence {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem;
+  max-width: 60rem;
+}
+.sequence .note {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  min-height: 1.9rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--dim);
+  border-radius: 4px;
+  font-size: 0.95rem;
+  color: var(--muted);
+  transition:
+    background 0.1s,
+    color 0.1s,
+    border-color 0.1s;
+}
+/* An empty pill has no line box; a zero-width char keeps the height fixed. */
+.sequence .note::before {
+  content: "\200b";
+}
+.sequence .note.phase-up {
+  background: color-mix(in srgb, var(--up) 15%, transparent);
+  color: var(--up);
+  border-color: var(--up);
+}
+.sequence .note.phase-up2 {
+  background: color-mix(in srgb, var(--up2) 18%, transparent);
+  color: var(--up2);
+  border-color: var(--up2);
+}
+.sequence .note.phase-down {
+  background: color-mix(in srgb, var(--good) 15%, transparent);
+  color: var(--good);
+  border-color: var(--good);
+}
+.sequence .note.phase-arp {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.sequence .note.current {
+  box-shadow: 0 0 0 2px var(--fg);
+}
+.sequence .note.placeholder {
+  border-color: transparent;
+}
+
+.heard {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 140px;
+  width: 120px;
+}
+.heard svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.heard-text {
+  fill: var(--fg);
+  font-size: 22px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  transition: fill 0.12s ease;
+}
+.tuning-arc {
+  stroke: var(--dim);
+  stroke-width: 3;
+  fill: none;
+  stroke-linecap: round;
+}
+
+.results {
+  max-width: 44rem;
+  width: 100%;
+  text-align: center;
+}
+.session-num {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+.deltas {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+.deltas .better {
+  color: var(--good);
+}
+.deltas .worse {
+  color: var(--bad);
+}
+.summary {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem 2rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--dim);
+}
+.summary div span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.summary div strong {
+  font-size: 1.4rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.summary div em {
+  display: block;
+  color: var(--fg);
+  font-size: 0.8rem;
+  font-style: normal;
+  margin-top: 0.15rem;
+}
+.list {
+  max-height: 35vh;
+  overflow-y: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+.list div {
+  display: grid;
+  grid-template-columns: 6rem 1fr auto;
+  gap: 1rem;
+  align-items: baseline;
+  text-align: left;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--dim);
+}
+.list .row-mode {
+  color: var(--muted);
+}
+.list .fast .row-mode,
+.list .slow .row-mode {
+  color: inherit;
+  opacity: 0.7;
+}
+.list div:last-child {
+  border-bottom: none;
+}
+.list .fast {
+  color: var(--accent);
+}
+.list .slow {
+  color: var(--bad);
+}
+
+.mic-warn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--bad);
+  color: #1a1a1a;
+  border: none;
+  padding: 0.4rem 0.8rem;
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transform: translateY(3px);
+  animation: mic-pulse 1.8s ease-in-out infinite;
+}
+.mic-warn::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1a1a1a;
+}
+.mic-warn:active {
+  transform: translateY(3px) scale(0.96);
+}
+.mic-warn.hidden {
+  display: none;
+}
+@keyframes mic-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--bad) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mic-warn {
+    animation: none;
+  }
+}
+
+/* Roomier screens: the phone-tuned sizes read tiny on a large display. */
+@media (min-width: 621px) {
+  .mode-label {
+    font-size: 1.3rem;
+    letter-spacing: 0.2em;
+  }
+  .scale-title {
+    gap: 0.55rem;
+  }
+  .scale-title .scale {
+    margin-bottom: 1rem;
+  }
+  .play-area {
+    gap: 2rem;
+  }
+  .sequence {
+    gap: 0.5rem;
+  }
+  .sequence .note {
+    min-width: 3.4rem;
+    min-height: 2.6rem;
+    padding: 0.5rem 0.8rem;
+    font-size: 1.25rem;
+    border-radius: 6px;
+  }
+  .heard {
+    width: 168px;
+    height: 196px;
+  }
+  .heard-text {
+    font-size: 30px;
+  }
+  .stats {
+    font-size: 1.2rem;
+    gap: 3.5rem;
+  }
+  .hint {
+    font-size: 1rem;
+  }
+  .option-bar {
+    padding: 0.4rem 0.7rem;
+    border-radius: 6px;
+  }
+  .option-bar button {
+    font-size: 0.85rem;
+    padding: 0.15rem 0.6rem;
+  }
+  .option-icon svg {
+    width: 19px;
+    height: 19px;
+  }
+  .option-icon.icon-sun svg,
+  .option-icon.icon-moon svg {
+    width: 18px;
+    height: 18px;
+  }
+  .option-icon.icon-clef {
+    font-size: 2.2rem;
+  }
+  .swap > .layer {
+    gap: 1.1rem;
+  }
+  .widget-row {
+    gap: 0.7rem;
+  }
+  .summary div strong {
+    font-size: 1.6rem;
+  }
+  .list {
+    font-size: 1rem;
+  }
+}
+
+/* Narrow screens: let the 8 note pills shrink to share one row. */
+@media (max-width: 620px) {
+  /* Top-light, bottom-heavy: shifts the content box up without resizing it. */
+  body {
+    padding: 0.25rem 0.5rem 1.75rem;
+    align-items: stretch;
+  }
+  /* Shrink-to-fit by default, so the sequence's width:100% would resolve
+     against its own content. Stretch the chain. */
+  #app,
+  .stage,
+  .play-area {
+    width: 100%;
+  }
+  /* The stage centres itself; the results screen is a plain block, so
+     centre it here. `safe` keeps a tall result scrollable from the top. */
+  #app {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: safe center;
+    align-items: center;
+  }
+  /* Heavier top spacer drops the title below centre; fr, so short screens reclaim it. */
+  .stage {
+    flex: 1;
+    min-height: 0; /* shrink to the locked viewport instead of overflowing it */
+    display: grid;
+    grid-template-rows: 1.75fr auto 1fr;
+    justify-items: center;
+  }
+  .play-area {
+    grid-row: 2;
+    align-self: center;
+  }
+  /* Centred, so its slack splits above and below the options. */
+  .widgets-bottom {
+    grid-row: 3;
+    align-self: center;
+  }
+  .play-area {
+    gap: 1rem;
+    margin-top: 0;
+  }
+  .sequence {
+    flex-wrap: nowrap;
+    gap: 0.25rem;
+    width: 100%;
+    /* Taller pills crowd the pattern label above. */
+    margin-top: 0.6rem;
+  }
+  .sequence .note {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0.55rem 0.1rem;
+    font-size: 1rem;
+  }
+  .widgets-bottom .layer {
+    gap: 0.85rem;
+  }
+  .widget-row {
+    gap: 0.5rem;
+  }
+}

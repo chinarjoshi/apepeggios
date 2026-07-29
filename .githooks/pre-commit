@@ -1,0 +1,35 @@
+#!/bin/sh
+# Formats staged files and re-stages them. npm install points core.hooksPath here.
+set -e
+
+bin=node_modules/.bin/prettier
+[ -x "$bin" ] || { echo "pre-commit: prettier missing; run npm install"; exit 0; }
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(js|mjs|css|html|json)$' || true)
+[ -n "$staged" ] || exit 0
+
+dirty=$(git diff --name-only)
+clean=""
+partial=""
+for f in $staged; do
+  if printf '%s\n' "$dirty" | grep -qxF "$f"; then partial="$partial $f"; else clean="$clean $f"; fi
+done
+
+# Only the staged blob is checked: re-staging would sweep in unstaged edits.
+status=0
+for f in $partial; do
+  staged_blob=$(mktemp); formatted=$(mktemp)
+  git show ":$f" > "$staged_blob"
+  "$bin" --stdin-filepath "$f" < "$staged_blob" > "$formatted"
+  cmp -s "$staged_blob" "$formatted" || {
+    echo "pre-commit: $f is partially staged and what you staged is unformatted"
+    status=1
+  }
+  rm -f "$staged_blob" "$formatted"
+done
+[ "$status" -eq 0 ] || { echo "Run 'npm run fmt', then re-stage."; exit 1; }
+
+if [ -n "$clean" ]; then
+  "$bin" --write --log-level warn $clean
+  git add $clean
+fi
