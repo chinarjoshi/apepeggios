@@ -11,7 +11,12 @@
   --good: #8dd88d;
   --bad: #ff6b6b;
 }
-* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
 .topbar {
   position: fixed;
   top: 1.25rem;
@@ -24,10 +29,12 @@
   /* Full width, so let clicks through the empty middle. */
   pointer-events: none;
 }
-.topbar > * { pointer-events: auto; }
+.topbar > * {
+  pointer-events: auto;
+}
 .mic-debug {
   font-family: var(--mono);
-  white-space: pre;   /* keep the padStart alignment; HTML collapses runs of spaces */
+  white-space: pre; /* keep the padStart alignment; HTML collapses runs of spaces */
   font-size: 0.65rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -36,12 +43,17 @@
   display: flex;
   align-items: center;
   gap: 0.1rem;
-  font-family: "Lexend Deca", system-ui, -apple-system, sans-serif;
+  font-family:
+    "Lexend Deca",
+    system-ui,
+    -apple-system,
+    sans-serif;
   font-size: 1.75rem;
   font-weight: 500;
   letter-spacing: -0.01em;
   user-select: none;
   text-decoration: none;
+  min-width: 0;
 }
 .brand .trumpet {
   display: inline-block;
@@ -52,12 +64,27 @@
   mask: url("logo.png") center/contain no-repeat;
   transform: translateY(-3px);
 }
-.brand .wordmark { margin-left: -0.4rem; }
-.brand .ape { color: var(--accent); }
-.brand .peggios { color: var(--muted); }
+.brand .wordmark {
+  margin-left: -0.4rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brand .ape {
+  color: var(--accent);
+}
+.brand .peggios {
+  color: var(--muted);
+}
 /* Locked: a stray drag would scroll or rubber-band instead of tapping.
    `dvh` so a collapsing address bar doesn't leave the layout short. */
-html, body { height: 100dvh; overflow: hidden; overscroll-behavior: none; }
+html,
+body {
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
 body {
   background: var(--bg);
   color: var(--fg);
@@ -70,12 +97,30 @@ body {
   touch-action: manipulation;
 }
 /* Results is the one view that runs long, so only it scrolls. */
-#app { max-height: 100%; }
-#app:has(.results) { overflow-y: auto; overscroll-behavior: contain; }
-.stage { display: flex; flex-direction: column; align-items: center; text-align: center; max-width: 100%; }
+#app {
+  max-height: 100%;
+}
+#app:has(.results) {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 100%;
+}
 /* margin-bottom, not a stage gap: on mobile it grows the auto row, so the fr
    spacers take the space from above and the options stay put. */
-.play-area { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; margin-top: 1.5rem; margin-bottom: 1rem; }
+.play-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+}
 .scale {
   /* fitChordSize(): largest size the longest possible name still fits at. */
   font-size: var(--scale-size, 3.5rem);
@@ -86,7 +131,9 @@ body {
   letter-spacing: -0.02em;
   transition: color 0.15s;
 }
-.scale.success { color: var(--good); }
+.scale.success {
+  color: var(--good);
+}
 .mode-label {
   color: var(--muted);
   font-size: 1.05rem;
@@ -94,16 +141,44 @@ body {
   letter-spacing: 0.18em;
   text-transform: uppercase;
 }
-.scale-title { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
-.scale-title .scale { margin-bottom: 0.8rem; }
-.hint { color: var(--muted); font-size: 0.9rem; }
-.hint strong { color: var(--fg); font-weight: 600; }
-.stats { display: flex; gap: 3rem; color: var(--muted); font-size: 1rem; font-variant-numeric: tabular-nums; }
+.scale-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+.scale-title .scale {
+  margin-bottom: 0.8rem;
+}
+.hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.hint strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+.stats {
+  display: flex;
+  gap: 3rem;
+  color: var(--muted);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
 /* Fixed width per field, so 9 -> 10 doesn't shift the centred row. */
-.stats strong { color: var(--fg); font-weight: 500; display: inline-block; text-align: right; }
-.stats .stat-count strong { min-width: var(--count-w, 2ch); }
+.stats strong {
+  color: var(--fg);
+  font-weight: 500;
+  display: inline-block;
+  text-align: right;
+}
+.stats .stat-count strong {
+  min-width: var(--count-w, 2ch);
+}
 /* Layers share one grid cell so swapping them never shifts the page. */
-.swap { display: grid; }
+.swap {
+  display: grid;
+}
 .swap > .layer {
   grid-area: 1 / 1;
   display: flex;
@@ -113,9 +188,22 @@ body {
   gap: 0.9rem;
   transition: opacity 0.3s ease;
 }
-.swap > .layer.faded { opacity: 0; pointer-events: none; }
-.widget-row { display: flex; gap: 0.5rem; align-items: center; justify-content: center; flex-wrap: wrap; }
-.mode-toggles { flex-wrap: wrap; justify-content: center; max-width: 40rem; }
+.swap > .layer.faded {
+  opacity: 0;
+  pointer-events: none;
+}
+.widget-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.mode-toggles {
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 40rem;
+}
 .option-bar {
   display: flex;
   gap: 0.1rem;
@@ -133,9 +221,20 @@ body {
   padding-right: 0.4rem;
   justify-content: center;
 }
-.option-icon svg { width: 16px; height: 16px; display: block; }
-.option-icon.icon-sun svg, .option-icon.icon-moon svg { width: 15px; height: 15px; }
-.option-icon.icon-moon { padding-right: 0; padding-left: 0.4rem; }
+.option-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+.option-icon.icon-sun svg,
+.option-icon.icon-moon svg {
+  width: 15px;
+  height: 15px;
+}
+.option-icon.icon-moon {
+  padding-right: 0;
+  padding-left: 0.4rem;
+}
 .option-icon.icon-clef {
   font-family: "Bravura Text", "Segoe UI Symbol", "Apple Symbols", serif;
   font-size: 1.9rem;
@@ -157,10 +256,16 @@ body {
 }
 /* On touch, hover sticks after a tap and the toggle looks unchanged. */
 @media (hover: hover) {
-  .option-bar button:hover { color: var(--fg); }
+  .option-bar button:hover {
+    color: var(--fg);
+  }
 }
-.option-bar button.selected { color: var(--accent); }
-.option-bar button:active { transform: scale(0.94); }
+.option-bar button.selected {
+  color: var(--accent);
+}
+.option-bar button:active {
+  transform: scale(0.94);
+}
 
 .sequence {
   display: flex;
@@ -180,10 +285,15 @@ body {
   border-radius: 4px;
   font-size: 0.95rem;
   color: var(--muted);
-  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  transition:
+    background 0.1s,
+    color 0.1s,
+    border-color 0.1s;
 }
 /* An empty pill has no line box; a zero-width char keeps the height fixed. */
-.sequence .note::before { content: "\200b"; }
+.sequence .note::before {
+  content: "\200b";
+}
 .sequence .note.phase-up {
   background: color-mix(in srgb, var(--up) 15%, transparent);
   color: var(--up);
@@ -207,7 +317,9 @@ body {
 .sequence .note.current {
   box-shadow: 0 0 0 2px var(--fg);
 }
-.sequence .note.placeholder { border-color: transparent; }
+.sequence .note.placeholder {
+  border-color: transparent;
+}
 
 .heard {
   display: flex;
@@ -216,7 +328,11 @@ body {
   height: 140px;
   width: 120px;
 }
-.heard svg { width: 100%; height: 100%; overflow: visible; }
+.heard svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
 .heard-text {
   fill: var(--fg);
   font-size: 22px;
@@ -224,19 +340,75 @@ body {
   font-variant-numeric: tabular-nums;
   transition: fill 0.12s ease;
 }
-.tuning-arc { stroke: var(--dim); stroke-width: 3; fill: none; stroke-linecap: round; }
+.tuning-arc {
+  stroke: var(--dim);
+  stroke-width: 3;
+  fill: none;
+  stroke-linecap: round;
+}
 
-
-.results { max-width: 44rem; width: 100%; text-align: center; }
-.session-num { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
-.deltas { display: flex; justify-content: center; gap: 1.5rem; font-size: 0.9rem; color: var(--muted); font-variant-numeric: tabular-nums; margin-bottom: 1.5rem; flex-wrap: wrap; }
-.deltas .better { color: var(--good); }
-.deltas .worse { color: var(--bad); }
-.summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.25rem 2rem; margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--dim); }
-.summary div span { display: block; color: var(--muted); font-size: 0.75rem; margin-bottom: 0.25rem; text-transform: uppercase; letter-spacing: 0.05em; }
-.summary div strong { font-size: 1.4rem; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--accent); }
-.summary div em { display: block; color: var(--fg); font-size: 0.8rem; font-style: normal; margin-top: 0.15rem; }
-.list { max-height: 35vh; overflow-y: auto; font-variant-numeric: tabular-nums; font-size: 0.9rem; margin-bottom: 1.5rem; }
+.results {
+  max-width: 44rem;
+  width: 100%;
+  text-align: center;
+}
+.session-num {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+.deltas {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+.deltas .better {
+  color: var(--good);
+}
+.deltas .worse {
+  color: var(--bad);
+}
+.summary {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem 2rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--dim);
+}
+.summary div span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.summary div strong {
+  font-size: 1.4rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.summary div em {
+  display: block;
+  color: var(--fg);
+  font-size: 0.8rem;
+  font-style: normal;
+  margin-top: 0.15rem;
+}
+.list {
+  max-height: 35vh;
+  overflow-y: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
 .list div {
   display: grid;
   grid-template-columns: 6rem 1fr auto;
@@ -246,11 +418,23 @@ body {
   padding: 0.4rem 0;
   border-bottom: 1px solid var(--dim);
 }
-.list .row-mode { color: var(--muted); }
-.list .fast .row-mode, .list .slow .row-mode { color: inherit; opacity: 0.7; }
-.list div:last-child { border-bottom: none; }
-.list .fast { color: var(--accent); }
-.list .slow { color: var(--bad); }
+.list .row-mode {
+  color: var(--muted);
+}
+.list .fast .row-mode,
+.list .slow .row-mode {
+  color: inherit;
+  opacity: 0.7;
+}
+.list div:last-child {
+  border-bottom: none;
+}
+.list .fast {
+  color: var(--accent);
+}
+.list .slow {
+  color: var(--bad);
+}
 
 .mic-warn {
   display: flex;
@@ -265,6 +449,8 @@ body {
   font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
   transform: translateY(3px);
   animation: mic-pulse 1.8s ease-in-out infinite;
 }
@@ -275,23 +461,45 @@ body {
   border-radius: 50%;
   background: #1a1a1a;
 }
-.mic-warn:active { transform: translateY(3px) scale(0.96); }
-.mic-warn.hidden { display: none; }
+.mic-warn:active {
+  transform: translateY(3px) scale(0.96);
+}
+.mic-warn.hidden {
+  display: none;
+}
 @keyframes mic-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--bad) 55%, transparent); }
-  70%      { box-shadow: 0 0 0 7px transparent; }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--bad) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 7px transparent;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .mic-warn { animation: none; }
+  .mic-warn {
+    animation: none;
+  }
 }
 
 /* Roomier screens: the phone-tuned sizes read tiny on a large display. */
 @media (min-width: 621px) {
-  .mode-label { font-size: 1.3rem; letter-spacing: 0.2em; }
-  .scale-title { gap: 0.55rem; }
-  .scale-title .scale { margin-bottom: 1rem; }
-  .play-area { gap: 2rem; }
-  .sequence { gap: 0.5rem; }
+  .mode-label {
+    font-size: 1.3rem;
+    letter-spacing: 0.2em;
+  }
+  .scale-title {
+    gap: 0.55rem;
+  }
+  .scale-title .scale {
+    margin-bottom: 1rem;
+  }
+  .play-area {
+    gap: 2rem;
+  }
+  .sequence {
+    gap: 0.5rem;
+  }
   .sequence .note {
     min-width: 3.4rem;
     min-height: 2.6rem;
@@ -299,29 +507,69 @@ body {
     font-size: 1.25rem;
     border-radius: 6px;
   }
-  .heard { width: 168px; height: 196px; }
-  .heard-text { font-size: 30px; }
-  .stats { font-size: 1.2rem; gap: 3.5rem; }
-  .hint { font-size: 1rem; }
-  .option-bar { padding: 0.4rem 0.7rem; border-radius: 6px; }
-  .option-bar button { font-size: 0.85rem; padding: 0.15rem 0.6rem; }
-  .option-icon svg { width: 19px; height: 19px; }
-  .option-icon.icon-sun svg, .option-icon.icon-moon svg { width: 18px; height: 18px; }
-  .option-icon.icon-clef { font-size: 2.2rem; }
-  .swap > .layer { gap: 1.1rem; }
-  .widget-row { gap: 0.7rem; }
-  .summary div strong { font-size: 1.6rem; }
-  .list { font-size: 1rem; }
+  .heard {
+    width: 168px;
+    height: 196px;
+  }
+  .heard-text {
+    font-size: 30px;
+  }
+  .stats {
+    font-size: 1.2rem;
+    gap: 3.5rem;
+  }
+  .hint {
+    font-size: 1rem;
+  }
+  .option-bar {
+    padding: 0.4rem 0.7rem;
+    border-radius: 6px;
+  }
+  .option-bar button {
+    font-size: 0.85rem;
+    padding: 0.15rem 0.6rem;
+  }
+  .option-icon svg {
+    width: 19px;
+    height: 19px;
+  }
+  .option-icon.icon-sun svg,
+  .option-icon.icon-moon svg {
+    width: 18px;
+    height: 18px;
+  }
+  .option-icon.icon-clef {
+    font-size: 2.2rem;
+  }
+  .swap > .layer {
+    gap: 1.1rem;
+  }
+  .widget-row {
+    gap: 0.7rem;
+  }
+  .summary div strong {
+    font-size: 1.6rem;
+  }
+  .list {
+    font-size: 1rem;
+  }
 }
 
 /* Narrow screens: let the 8 note pills shrink to share one row. */
 @media (max-width: 620px) {
   /* Top-light, bottom-heavy: shifts the content box up without changing its
      height, so the title and options rise together and the gap holds. */
-  body { padding: 0.25rem 0.5rem 1.75rem; align-items: stretch; }
+  body {
+    padding: 0.25rem 0.5rem 1.75rem;
+    align-items: stretch;
+  }
   /* Shrink-to-fit by default, so the sequence's width:100% would resolve
      against its own content. Stretch the chain. */
-  #app, .stage, .play-area { width: 100%; }
+  #app,
+  .stage,
+  .play-area {
+    width: 100%;
+  }
   /* The stage centres itself; the results screen is a plain block, so
      centre it here. `safe` keeps a tall result scrollable from the top. */
   #app {
@@ -336,16 +584,25 @@ body {
      the top rather than pushing the options off the bottom. */
   .stage {
     flex: 1;
-    min-height: 0;   /* shrink to the locked viewport instead of overflowing it */
+    min-height: 0; /* shrink to the locked viewport instead of overflowing it */
     display: grid;
     grid-template-rows: 1.75fr auto 1fr;
     justify-items: center;
   }
-  .play-area { grid-row: 2; align-self: center; }
+  .play-area {
+    grid-row: 2;
+    align-self: center;
+  }
   /* Centred in the lower band, so its slack splits above and below rather than
      jamming the options against the tuner. */
-  .widgets-bottom { grid-row: 3; align-self: center; }
-  .play-area { gap: 1rem; margin-top: 0; }
+  .widgets-bottom {
+    grid-row: 3;
+    align-self: center;
+  }
+  .play-area {
+    gap: 1rem;
+    margin-top: 0;
+  }
   .sequence {
     flex-wrap: nowrap;
     gap: 0.25rem;
@@ -359,6 +616,10 @@ body {
     padding: 0.55rem 0.1rem;
     font-size: 1rem;
   }
-  .widgets-bottom .layer { gap: 0.85rem; }
-  .widget-row { gap: 0.5rem; }
+  .widgets-bottom .layer {
+    gap: 0.85rem;
+  }
+  .widget-row {
+    gap: 0.5rem;
+  }
 }

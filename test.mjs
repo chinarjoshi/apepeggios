@@ -16,40 +16,73 @@ let passed = 0;
 const failures = [];
 
 function check(name, fn) {
-  try { fn(); passed++; }
-  catch (e) { failures.push(`${name}\n    ${e.message}`); }
+  try {
+    fn();
+    passed++;
+  } catch (e) {
+    failures.push(`${name}\n    ${e.message}`);
+  }
 }
 async function checkAsync(name, fn) {
-  try { await fn(); passed++; }
-  catch (e) { failures.push(`${name}\n    ${e.message}`); }
+  try {
+    await fn();
+    passed++;
+  } catch (e) {
+    failures.push(`${name}\n    ${e.message}`);
+  }
 }
 function eq(actual, expected, what = "value") {
   const a = Array.isArray(actual) ? actual.join(" ") : String(actual);
   const b = Array.isArray(expected) ? expected.join(" ") : String(expected);
   if (a !== b) throw new Error(`${what}\n      got: ${a}\n      want: ${b}`);
 }
-function ok(cond, what) { if (!cond) throw new Error(what); }
+function ok(cond, what) {
+  if (!cond) throw new Error(what);
+}
 
 // ------------------------------------------------------------- stub DOM
 
 function boot({ storage = {}, hover = true, width = 1440, clock = { t: 0 }, wakeLock } = {}) {
   const node = () => ({
     classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
-    dataset: {}, style: {}, textContent: "", innerHTML: "",
-    addEventListener() {}, remove() {}, insertAdjacentHTML() {},
-    setAttribute() {}, closest: () => null,
-    querySelector: () => null, querySelectorAll: () => [],
+    dataset: {},
+    style: {},
+    textContent: "",
+    innerHTML: "",
+    addEventListener() {},
+    remove() {},
+    insertAdjacentHTML() {},
+    setAttribute() {},
+    closest: () => null,
+    querySelector: () => null,
+    querySelectorAll: () => [],
   });
   const canvas2d = { font: "", measureText: t => ({ width: t.length * 0.6 * 88 }) };
 
   const ctx = createContext({
-    console, Math, Object, Array, JSON, Set, Map, String, Number, parseInt, parseFloat,
-    Float32Array, isNaN, structuredClone: v => JSON.parse(JSON.stringify(v)),
-    setTimeout, clearTimeout, requestAnimationFrame: () => 0,
+    console,
+    Math,
+    Object,
+    Array,
+    JSON,
+    Set,
+    Map,
+    String,
+    Number,
+    parseInt,
+    parseFloat,
+    Float32Array,
+    isNaN,
+    structuredClone: v => JSON.parse(JSON.stringify(v)),
+    setTimeout,
+    clearTimeout,
+    requestAnimationFrame: () => 0,
     performance: { now: () => clock.t },
     localStorage: {
       getItem: k => (k in storage ? storage[k] : null),
-      setItem: (k, v) => { storage[k] = v; },
+      setItem: (k, v) => {
+        storage[k] = v;
+      },
     },
     location: { hostname: "localhost", search: "" },
     navigator: {
@@ -69,7 +102,9 @@ function boot({ storage = {}, hover = true, width = 1440, clock = { t: 0 }, wake
   ctx.globalThis = ctx;
 
   const script = SRCS.map(f => readFileSync(f, "utf8")).join("\n");
-  runInContext(script + `
+  runInContext(
+    script +
+      `
     ;globalThis.__api = {
       MODES, MODE, keySharpsMajor, MAX_ACCIDENTALS, NOTATIONS,
       buildExpected, scaleSpelling, activePools, buildUnlimitedList,
@@ -80,7 +115,9 @@ function boot({ storage = {}, hover = true, width = 1440, clock = { t: 0 }, wake
       get times() { return times; },
       get state() { return state; },
       completeCurrent,
-    };`, ctx);
+    };`,
+    ctx,
+  );
   return ctx.__api;
 }
 
@@ -88,8 +125,14 @@ function boot({ storage = {}, hover = true, width = 1440, clock = { t: 0 }, wake
 // by mutation testing. A case that catches nothing is noise.
 
 let api;
-check("boots without throwing", () => { api = boot(); ok(api, "no api exported"); });
-if (!api) { console.error("boot failed; aborting"); process.exit(1); }
+check("boots without throwing", () => {
+  api = boot();
+  ok(api, "no api exported");
+});
+if (!api) {
+  console.error("boot failed; aborting");
+  process.exit(1);
+}
 
 // ------------------------------------------------------------------ theory
 
@@ -99,8 +142,7 @@ check("key signatures stay inside seven accidentals", () => {
     for (const [key, sig] of Object.entries(api.keySharpsMajor)) {
       const name = `${key} ${m.id}`;
       if (!api.activePools({ [m.id]: 1 })[m.id].includes(name)) continue;
-      ok(Math.abs(sig + m.offset) <= api.MAX_ACCIDENTALS,
-         `${name} needs ${sig + m.offset}`);
+      ok(Math.abs(sig + m.offset) <= api.MAX_ACCIDENTALS, `${name} needs ${sig + m.offset}`);
     }
   const minor = api.activePools({ Minor: 1 }).Minor;
   for (const bad of ["D♭ Minor", "G♭ Minor", "C♭ Minor"])
@@ -109,10 +151,10 @@ check("key signatures stay inside seven accidentals", () => {
 });
 
 check("scales are spelled diatonically", () => {
-  eq(api.scaleSpelling("G♭ Major"), ["G♭","A♭","B♭","C♭","D♭","E♭","F"], "G♭ major");
-  eq(api.scaleSpelling("C♭ Major"), ["C♭","D♭","E♭","F♭","G♭","A♭","B♭"], "C♭ major");
-  eq(api.scaleSpelling("F♯ Major"), ["F♯","G♯","A♯","B","C♯","D♯","E♯"], "F♯ major");
-  eq(api.scaleSpelling("C Blues"), ["C","E♭","F","G♭","G","B♭"], "C blues");
+  eq(api.scaleSpelling("G♭ Major"), ["G♭", "A♭", "B♭", "C♭", "D♭", "E♭", "F"], "G♭ major");
+  eq(api.scaleSpelling("C♭ Major"), ["C♭", "D♭", "E♭", "F♭", "G♭", "A♭", "B♭"], "C♭ major");
+  eq(api.scaleSpelling("F♯ Major"), ["F♯", "G♯", "A♯", "B", "C♯", "D♯", "E♯"], "F♯ major");
+  eq(api.scaleSpelling("C Blues"), ["C", "E♭", "F", "G♭", "G", "B♭"], "C blues");
   for (const m of api.MODES) {
     if (api.MODE[m.id].scale.length !== 7) continue;
     for (const name of api.activePools({ [m.id]: 1 })[m.id]) {
@@ -123,13 +165,21 @@ check("scales are spelled diatonically", () => {
 });
 
 check("chords and arpeggios match their mode", () => {
-  eq(api.MODES.map(m => api.chordName("G " + m.id, "sym")).join(" "),
-     "GΔ♯11 GΔ7 G7 G−Δ7 G−7 G−Δ7 G−7 G7", "jazz shorthand");
-  eq(api.MODES.map(m => api.chordName("G " + m.id, "txt")).join(" "),
-     "Gmaj7♯11 Gmaj7 G7 Gm(maj7) Gm7 Gm(maj7) Gm7 G7", "spelled out");
-  eq(api.MODES.map(m => m.arp.join("-")).join("  "),
-     "0-4-7-11  0-4-7-11  0-4-7-10  0-3-7-11  0-3-7-10  0-3-7-11  0-3-7-10  0-3-7-10",
-     "arpeggio intervals");
+  eq(
+    api.MODES.map(m => api.chordName("G " + m.id, "sym")).join(" "),
+    "GΔ♯11 GΔ7 G7 G−Δ7 G−7 G−Δ7 G−7 G7",
+    "jazz shorthand",
+  );
+  eq(
+    api.MODES.map(m => api.chordName("G " + m.id, "txt")).join(" "),
+    "Gmaj7♯11 Gmaj7 G7 Gm(maj7) Gm7 Gm(maj7) Gm7 G7",
+    "spelled out",
+  );
+  eq(
+    api.MODES.map(m => m.arp.join("-")).join("  "),
+    "0-4-7-11  0-4-7-11  0-4-7-10  0-3-7-11  0-3-7-10  0-3-7-11  0-3-7-10  0-3-7-10",
+    "arpeggio intervals",
+  );
   // A tone outside its own scale has no pill to light up. Blues shipped
   // broken this way, with a natural 3rd it does not contain.
   for (const m of api.MODES)
@@ -139,21 +189,29 @@ check("chords and arpeggios match their mode", () => {
 
 // ---------------------------------------------------------------- patterns
 
-const DEGREE = { 0:"1", 2:"2", 4:"3", 5:"4", 7:"5", 9:"6", 11:"7" };
+const DEGREE = { 0: "1", 2: "2", 4: "3", 5: "4", 7: "5", 9: "6", 11: "7" };
 const asDegrees = (ctx, path) =>
   path.slots.map(s => (s === 7 ? "8" : DEGREE[ctx.scale[s]])).join(" ");
 
 check("runs ascend and descend exactly", () => {
   const c = api.scaleContext("C Major", 0);
-  eq(asDegrees(c, api.intervalSeg(c, 2, "up")),
-     "1 3 2 4 3 5 4 6 5 7 6 8 7 2 8", "3rds up");
+  eq(asDegrees(c, api.intervalSeg(c, 2, "up")), "1 3 2 4 3 5 4 6 5 7 6 8 7 2 8", "3rds up");
   // Mirrors the exercise, not the ascent reversed: opens 8-6, ends 2-7, 1.
-  eq(asDegrees(c, api.intervalSeg(c, 2, "down", "down")),
-     "8 6 7 5 6 4 5 3 4 2 3 1 2 7 1", "3rds down");
-  eq(asDegrees(c, api.groupSeg(c, 3, "up")),
-     "1 2 3 2 3 4 3 4 5 4 5 6 5 6 7 6 7 8 7 8 2 8", "in3s up");
-  eq(asDegrees(c, api.groupSeg(c, 3, "down", "down")),
-     "8 7 6 7 6 5 6 5 4 5 4 3 4 3 2 3 2 1 2 1 7 1", "in3s down");
+  eq(
+    asDegrees(c, api.intervalSeg(c, 2, "down", "down")),
+    "8 6 7 5 6 4 5 3 4 2 3 1 2 7 1",
+    "3rds down",
+  );
+  eq(
+    asDegrees(c, api.groupSeg(c, 3, "up")),
+    "1 2 3 2 3 4 3 4 5 4 5 6 5 6 7 6 7 8 7 8 2 8",
+    "in3s up",
+  );
+  eq(
+    asDegrees(c, api.groupSeg(c, 3, "down", "down")),
+    "8 7 6 7 6 5 6 5 4 5 4 3 4 3 2 3 2 1 2 1 7 1",
+    "in3s down",
+  );
   // Struck once: a doubled pitch is invisible to the tracker and would stall.
   for (const pat of ["scale", "thirds", "in3s"])
     for (const which of ["single", "double"]) {
@@ -165,23 +223,41 @@ check("runs ascend and descend exactly", () => {
 });
 
 check("single and double paths diverge only at the branch", () => {
-  for (const [pat, single, double] of [["scale",21,41], ["thirds",29,null], ["in3s",43,null]]) {
-    const e = api.buildExpected("C Major", 0, pat), b = e.branchIdx;
+  for (const [pat, single, double] of [
+    ["scale", 21, 41],
+    ["thirds", 29, null],
+    ["in3s", 43, null],
+  ]) {
+    const e = api.buildExpected("C Major", 0, pat),
+      b = e.branchIdx;
     eq(e.single.pcs.length, single, `${pat} single length`);
     // Steps carry the register the pitch classes throw away: they must agree
     // with the pitches and start on the root.
-    e.single.pcs.forEach((pc, i) => eq((e.single.steps[i] % 12 + 12) % 12, pc,
-      `${pat} step ${e.single.steps[i]} at ${i} is not the pitch played`));
+    e.single.pcs.forEach((pc, i) =>
+      eq(
+        ((e.single.steps[i] % 12) + 12) % 12,
+        pc,
+        `${pat} step ${e.single.steps[i]} at ${i} is not the pitch played`,
+      ),
+    );
     eq(e.single.steps[0], 0, `${pat} does not start on the root`);
     // Nothing leaps further than a fifth; a jump past an octave means some
     // entry lost the register it was built in.
-    const leapOk = p => p.steps.forEach((st, i) => ok(i === 0 || Math.abs(st - p.steps[i - 1]) <= 12,
-      `${pat} leaps ${Math.abs(st - p.steps[i - 1])} semitones at ${i}`));
+    const leapOk = p =>
+      p.steps.forEach((st, i) =>
+        ok(
+          i === 0 || Math.abs(st - p.steps[i - 1]) <= 12,
+          `${pat} leaps ${Math.abs(st - p.steps[i - 1])} semitones at ${i}`,
+        ),
+      );
     // Every ascent finishes on the octave, whatever route it took there.
     const top = p => Math.max(...p.steps.filter((_, i) => p.phases[i].startsWith("up")));
     leapOk(e.single);
     ok(top(e.single) >= 12, `${pat} ascent never reaches the octave`);
-    if (double === null) { ok(!e.double, `${pat} should have no second octave`); continue; }
+    if (double === null) {
+      ok(!e.double, `${pat} should have no second octave`);
+      continue;
+    }
     eq(e.double.pcs.length, double, `${pat} double length`);
     for (let i = 0; i < b; i++)
       eq(e.single.pcs[i], e.double.pcs[i], `${pat} prefix differs at ${i}`);
@@ -193,16 +269,25 @@ check("single and double paths diverge only at the branch", () => {
     ok(e.double.phases[0] === "up2", `${pat} root pill is not part of the ascent`);
     eq(e.double.phases.indexOf("up2", 1), b - 1, `${pat} second octave starts late`);
     ok(!e.single.phases.includes("up2"), `${pat} one-octave run claims a second octave`);
-    e.double.pcs.forEach((pc, i) => eq((e.double.steps[i] % 12 + 12) % 12, pc,
-      `${pat} double step ${e.double.steps[i]} at ${i} is not the pitch played`));
+    e.double.pcs.forEach((pc, i) =>
+      eq(
+        ((e.double.steps[i] % 12) + 12) % 12,
+        pc,
+        `${pat} double step ${e.double.steps[i]} at ${i} is not the pitch played`,
+      ),
+    );
     leapOk(e.double);
     eq(top(e.double) - top(e.single), 12, `${pat} two-octave ascent tops out wrong`);
     // Peaks on the top chord tone an octave up. The root above it is skipped,
     // so this sits below the scale ascent's top rather than reaching it.
     const arp = e.double.steps.filter((_, i) => e.double.phases[i] === "arp");
     const chord = api.MODE.Major.arp;
-    if (arp.length) eq(Math.max(...arp), chord[chord.length - 1] + 12,
-                       `${pat} two-octave arpeggio does not peak on the 7th above`);
+    if (arp.length)
+      eq(
+        Math.max(...arp),
+        chord[chord.length - 1] + 12,
+        `${pat} two-octave arpeggio does not peak on the 7th above`,
+      );
   }
 });
 
@@ -212,8 +297,11 @@ check("the two-octave arpeggio saves the 7th for the top", () => {
   const e = api.buildExpected("C Major", 0, "scale");
   const at = e.double.phases.indexOf("arp");
   eq(e.double.steps[at - 1], 0, "the arpeggio should pick up from the scale's root");
-  eq(e.double.steps.slice(at), [4, 7, 12, 16, 19, 23, 19, 16, 12, 7, 4, 0],
-     "C · E G C · E G B · G E C · G E C");
+  eq(
+    e.double.steps.slice(at),
+    [4, 7, 12, 16, 19, 23, 19, 16, 12, 7, 4, 0],
+    "C · E G C · E G B · G E C · G E C",
+  );
   // Both octave roots light the top pill; only the final one lights the first.
   eq(e.double.slots.slice(at), [2, 4, 7, 2, 4, 6, 4, 2, 7, 4, 2, 0], "pills lit");
   // The same shape one octave down, so the two read as one exercise.
@@ -223,9 +311,13 @@ check("the two-octave arpeggio saves the 7th for the top", () => {
 
 check("transposition moves the pitches, not the written names", () => {
   const plain = api.buildExpected("C Major", 0, "scale");
-  const horn = api.buildExpected("C Major", -2, "scale");   // B♭ instrument
+  const horn = api.buildExpected("C Major", -2, "scale"); // B♭ instrument
   eq(horn.displayNames, plain.displayNames, "written names should not shift");
-  eq(horn.single.pcs, plain.single.pcs.map(pc => (pc + 10) % 12), "concert pitches");
+  eq(
+    horn.single.pcs,
+    plain.single.pcs.map(pc => (pc + 10) % 12),
+    "concert pitches",
+  );
   eq(horn.single.slots, plain.single.slots, "slots should not shift");
 });
 
@@ -234,11 +326,19 @@ check("transposition moves the pitches, not the written names", () => {
 check("a correct run completes, keeps its cents, and ignores strays", () => {
   const e = api.buildExpected("D Major", 0, "scale");
   let done = false;
-  const m = new api.Matcher(e, { onProgress() {}, onSuccess() { done = true; } });
+  const m = new api.Matcher(e, {
+    onProgress() {},
+    onSuccess() {
+      done = true;
+    },
+  });
   for (const pc of e.single.pcs) m.input(pc, 7);
   ok(done, "onSuccess never fired");
   eq(m.cents.length, e.single.pcs.length, "cents recorded");
-  ok(m.cents.every(c => c === 7), "cents preserved");
+  ok(
+    m.cents.every(c => c === 7),
+    "cents preserved",
+  );
   const m2 = new api.Matcher(e, { onProgress() {}, onSuccess() {} });
   for (let i = 0; i < 3; i++) m2.input(e.single.pcs[i], 0);
   m2.input((e.single.pcs[0] + 1) % 12, 0);
@@ -250,9 +350,9 @@ check("a backward note arms a rewind, and playing on cancels it", () => {
   const m = new api.Matcher(e, { onProgress() {}, onSuccess() {} });
   for (let i = 0; i < 4; i++) m.input(e.single.pcs[i], 0, 60 + e.single.steps[i]);
   ok(!api.pendingRewind.active, "a forward run armed a rewind");
-  m.input(e.single.pcs[1], 0, 60 + e.single.steps[1]);   // back to the second note
+  m.input(e.single.pcs[1], 0, 60 + e.single.steps[1]); // back to the second note
   ok(api.pendingRewind.active, "going backward armed no rewind");
-  m.input(e.single.pcs[4], 0, 60 + e.single.steps[4]);   // played through
+  m.input(e.single.pcs[4], 0, 60 + e.single.steps[4]); // played through
   ok(!api.pendingRewind.active, "a pending rewind was not cancelled");
 });
 
@@ -278,9 +378,9 @@ check("register decides what counts as going backward", () => {
     eq(m.matchIdx, 6, "did not reach the sixth");
     return m;
   };
-  upToSixth().input(e.single.pcs[0], 0, 72);   // the root, an octave up
+  upToSixth().input(e.single.pcs[0], 0, 72); // the root, an octave up
   ok(!api.pendingRewind.active, "the octave above the root armed a rewind to the bottom");
-  upToSixth().input(e.single.pcs[0], 0, 60);   // the root they actually played
+  upToSixth().input(e.single.pcs[0], 0, 60); // the root they actually played
   ok(api.pendingRewind.active, "a genuine return to the root no longer rewinds");
   api.pendingRewind.cancel();
 });
@@ -305,7 +405,7 @@ check("a pitch counts only once it is stable", () => {
   const heard = [];
   const t = new api.NoteTracker(pc => heard.push(pc));
   const tone = midi => 440 * Math.pow(2, (midi - 69) / 12);
-  t.process(0.2, tone(69));                    // one frame is not enough
+  t.process(0.2, tone(69)); // one frame is not enough
   eq(heard.length, 0, "a single frame counted as a note");
   t.process(0.2, tone(69));
   eq(heard, [9], "a stable pitch did not register");
@@ -321,9 +421,10 @@ check("pitch detection spans the advertised range", () => {
     const buf = new Float32Array(n);
     for (let i = 0; i < n; i++) {
       const t = i / rate;
-      buf[i] = 0.5 * Math.sin(2 * Math.PI * freq * t)
-             + 0.3 * Math.sin(4 * Math.PI * freq * t)
-             + 0.15 * Math.sin(6 * Math.PI * freq * t);
+      buf[i] =
+        0.5 * Math.sin(2 * Math.PI * freq * t) +
+        0.3 * Math.sin(4 * Math.PI * freq * t) +
+        0.15 * Math.sin(6 * Math.PI * freq * t);
     }
     return buf;
   };
@@ -361,7 +462,7 @@ await checkAsync("a completed scale records its intonation", async () => {
   m.input(pcs[0], 11);
   m.input(pcs[1], 11);
   eq(a.state, "playing", "a second correct note did not start the run");
-  clock.t = 11_000;   // past MIN_SCALE_MS
+  clock.t = 11_000; // past MIN_SCALE_MS
   for (let i = 2; i < pcs.length; i++) m.input(pcs[i], 11);
   await new Promise(r => setTimeout(r, 700));
   const rec = a.times[0];
@@ -380,7 +481,7 @@ await checkAsync("runs that cannot have been played are not recorded", async () 
   const pcs = a.matcher.expected.single.pcs;
   a.matcher.input(pcs[0], 5);
   a.matcher.input(pcs[1], 5);
-  clock.t = 4_000;                            // well under MIN_SCALE_MS
+  clock.t = 4_000; // well under MIN_SCALE_MS
   for (let i = 2; i < pcs.length; i++) a.matcher.input(pcs[i], 5);
   await new Promise(r => setTimeout(r, 700));
   eq(a.times.length, 0, "an impossibly fast run was recorded");
@@ -402,10 +503,17 @@ await checkAsync("runs that cannot have been played are not recorded", async () 
 await checkAsync("the screen lock spans the run and nothing else", async () => {
   const log = [];
   const settle = () => new Promise(r => setTimeout(r, 20));
-  const wakeLock = { request: async () => {
-    log.push("acquire");
-    return { release: async () => { log.push("release"); }, addEventListener() {} };
-  } };
+  const wakeLock = {
+    request: async () => {
+      log.push("acquire");
+      return {
+        release: async () => {
+          log.push("release");
+        },
+        addEventListener() {},
+      };
+    },
+  };
 
   const a = boot({ wakeLock });
   await settle();
@@ -413,13 +521,16 @@ await checkAsync("the screen lock spans the run and nothing else", async () => {
 
   const pcs = a.matcher.expected.single.pcs;
   a.matcher.input(pcs[0], 0);
-  a.matcher.input(pcs[1], 0);   // the second correct note starts the run
+  a.matcher.input(pcs[1], 0); // the second correct note starts the run
   await settle();
   eq(a.state, "playing", "the run did not start");
   eq(log.join(","), "acquire", "no lock was held for the run");
 
   // Auto-advance re-renders on every scale; none of those may re-request.
-  while (a.state !== "done") { a.completeCurrent(); await settle(); }
+  while (a.state !== "done") {
+    a.completeCurrent();
+    await settle();
+  }
   eq(log.join(","), "acquire,release", "lock not held exactly once across the run");
 });
 

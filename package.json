@@ -1,0 +1,13 @@
+{
+  "name": "apepeggios",
+  "private": true,
+  "scripts": {
+    "test": "node test.mjs",
+    "fmt": "prettier --write .",
+    "fmt:check": "prettier --check .",
+    "prepare": "git config core.hooksPath .githooks || true"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.6"
+  }
+}

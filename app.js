@@ -1,5 +1,6 @@
 // ===== Audio =====
 // Tuner: fixed 120x140 viewBox; the letter sits in a masked circle at (cx, baselineY).
+// prettier-ignore
 const TUNER = {
   width: 120, height: 140,
   cx: 60, baselineY: 70, maskRadius: 22, arcLeft: 12, arcRight: 108,
@@ -25,16 +26,32 @@ function centsToColor(cents) {
 
 let micError = "";
 
-let audioCtx = null, analyser = null, mediaStream = null, audioBuf = null;
+let audioCtx = null,
+  analyser = null,
+  mediaStream = null,
+  audioBuf = null;
 let noteTracker = null;
 let smoothedCents = 0;
 const HOLD_MS = 500;
 function holdTimer(ms, onFire) {
   let timer = null;
   return {
-    arm(data) { this.cancel(); timer = setTimeout(() => { timer = null; onFire(data); }, ms); },
-    cancel() { if (timer !== null) { clearTimeout(timer); timer = null; } },
-    get active() { return timer !== null; },
+    arm(data) {
+      this.cancel();
+      timer = setTimeout(() => {
+        timer = null;
+        onFire(data);
+      }, ms);
+    },
+    cancel() {
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    },
+    get active() {
+      return timer !== null;
+    },
   };
 }
 // Populated once state/matcher globals are defined below.
@@ -62,8 +79,7 @@ async function requestMic() {
     micError = "";
     return true;
   } catch (e) {
-    micError = e.name === "OverconstrainedError"
-      ? "raw audio refused" : (e.message || e.name);
+    micError = e.name === "OverconstrainedError" ? "raw audio refused" : e.message || e.name;
     setMicStatus(false);
     return false;
   } finally {
@@ -86,20 +102,23 @@ function startAudioGraph() {
 }
 
 async function initMic() {
-  if (!await requestMic()) return false;
+  if (!(await requestMic())) return false;
   return audioCtx ? true : startAudioGraph();
 }
 
 async function resumeAudioIfNeeded() {
   if (audioCtx && audioCtx.state === "suspended") {
-    try { await audioCtx.resume(); } catch {}
+    try {
+      await audioCtx.resume();
+    } catch {}
   }
 }
 function setMicStatus(on) {
   const el = document.getElementById("mic-warn");
   if (!el) return;
   el.classList.toggle("hidden", on);
-  el.textContent = micError ? `mic: ${micError}` : "unmute mic";
+  el.textContent = micError ? "mic off" : "unmute mic";
+  el.title = micError ? `mic: ${micError}` : "";
 }
 function detectLoop() {
   if (!analyser) return;
@@ -110,8 +129,9 @@ function detectLoop() {
   if (micDebug && noteTracker) {
     // Same width as a reading, so dropping in and out doesn't resize the line.
     const hz = (freq > 0 ? freq.toFixed(0) + "hz" : "-----").padStart(6);
-    micDebug.textContent = `rms ${rms.toFixed(4)} gate ${noteTracker.rmsOn.toFixed(4)}`
-      + ` floor ${(noteTracker.noiseFloor ?? 0).toFixed(4)} ${hz}`;
+    micDebug.textContent =
+      `rms ${rms.toFixed(4)} gate ${noteTracker.rmsOn.toFixed(4)}` +
+      ` floor ${(noteTracker.noiseFloor ?? 0).toFixed(4)} ${hz}`;
   }
   if (active) renderTuner(freq, rms);
   requestAnimationFrame(detectLoop);
@@ -127,9 +147,15 @@ function renderTuner(freq, rms) {
   // full hold before it counts as played.
   const sounding = freq > 0 && rms >= (noteTracker?.rmsOn ?? Infinity) * TRACKER.offRatio;
   if (!sounding) {
-    if (textEl) { textEl.textContent = "—"; textEl.style.fill = ""; }
+    if (textEl) {
+      textEl.textContent = "—";
+      textEl.style.fill = "";
+    }
     smoothedCents = 0;
-    if (arcEl) { arcEl.setAttribute("d", FLAT_ARC); arcEl.style.stroke = ""; }
+    if (arcEl) {
+      arcEl.setAttribute("d", FLAT_ARC);
+      arcEl.style.stroke = "";
+    }
     return;
   }
   const t = transpositions[transposition] || 0;
@@ -150,14 +176,14 @@ function renderTuner(freq, rms) {
 const isTouch = () => !window.matchMedia("(hover: hover)").matches;
 const restartHint = () => `<strong>${isTouch() ? "tap" : "click"}</strong> to restart`;
 
-const DEBUG = location.hostname !== "apepeggios.com"
-  || new URLSearchParams(location.search).has("debug");
+const DEBUG =
+  location.hostname !== "apepeggios.com" || new URLSearchParams(location.search).has("debug");
 const app = document.getElementById("app");
 const micDebug = DEBUG ? document.getElementById("mic-debug") : null;
 if (!DEBUG) document.getElementById("mic-debug")?.remove();
 let scales, times, state, scaleStart, index;
 let skipped = 0;
-let lastSession = null;   // the session just finished, or null if nothing counted
+let lastSession = null; // the session just finished, or null if nothing counted
 let currentMatcher = null;
 let weights = weightsStore.load();
 let transposition = transpositionStore.load();
@@ -165,7 +191,7 @@ let activePatterns = patternsStore.load();
 let currentPattern = activePatterns[0];
 let currentNotation = NOTATIONS[0];
 function pickPattern() {
-  if (!activePatterns.length) return null;   // all off — same as all modes off
+  if (!activePatterns.length) return null; // all off — same as all modes off
   return pick(activePatterns);
 }
 function pickNotation() {
@@ -191,13 +217,13 @@ function resetSession() {
 
 // Size to the widest name the app can ever produce, not just the ones in this
 // session, so toggling a mode never resizes the display mid-use.
-const CHORD_MAX_PX = 88;    // phones
-const CHORD_MAX_PX_WIDE = 124;  // roomier screens
+const CHORD_MAX_PX = 88; // phones
+const CHORD_MAX_PX_WIDE = 124; // roomier screens
 // Canvas needs the stack as a string; must match --mono.
 const CHORD_FONT = '700 %dpx ui-monospace, "SF Mono", Menlo, monospace';
 const LONGEST_CHORD = Object.keys(keySharpsMajor)
   .flatMap(key => MODES.flatMap(m => NOTATIONS.map(n => key + m.chord[n])))
-  .reduce((a, b) => b.length > a.length ? b : a, "");
+  .reduce((a, b) => (b.length > a.length ? b : a), "");
 let measureCtx = null;
 
 function fitChordSize() {
@@ -207,7 +233,7 @@ function fitChordSize() {
   const cap = avail > 620 ? CHORD_MAX_PX_WIDE : CHORD_MAX_PX;
   measureCtx.font = CHORD_FONT.replace("%d", cap);
   const needed = measureCtx.measureText(longest).width;
-  const px = needed > avail ? Math.floor(cap * avail / needed) : cap;
+  const px = needed > avail ? Math.floor((cap * avail) / needed) : cap;
   document.documentElement.style.setProperty("--scale-size", px + "px");
 }
 
@@ -225,28 +251,36 @@ let wakeLock = null;
 let wakeQueue = Promise.resolve();
 function updateWakeLock() {
   if (!navigator.wakeLock) return;
-  wakeQueue = wakeQueue.then(async () => {
-    const want = state === "playing" && document.visibilityState !== "hidden";
-    if (want === !!wakeLock) return;
-    if (want) {
-      wakeLock = await navigator.wakeLock.request("screen");
-      wakeLock.addEventListener("release", () => { wakeLock = null; });
-    } else {
-      const held = wakeLock;
+  wakeQueue = wakeQueue
+    .then(async () => {
+      const want = state === "playing" && document.visibilityState !== "hidden";
+      if (want === !!wakeLock) return;
+      if (want) {
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", () => {
+          wakeLock = null;
+        });
+      } else {
+        const held = wakeLock;
+        wakeLock = null;
+        await held.release();
+      }
+    })
+    .catch(() => {
       wakeLock = null;
-      await held.release();
-    }
-  }).catch(() => { wakeLock = null; });   // refused, or released underneath us
+    }); // refused, or released underneath us
 }
 
 function render() {
   updateWakeLock();
   if (state === "done") return renderResults();
-  renderStage();   // handles both "ready" and "playing"
+  renderStage(); // handles both "ready" and "playing"
 }
 
 // True when there's nothing to practice because a whole toggle row is off.
-function nothingSelected() { return !scales[index] || !currentPattern; }
+function nothingSelected() {
+  return !scales[index] || !currentPattern;
+}
 function emptyStateLabel() {
   const missing = [];
   if (!scales[index]) missing.push("modes");
@@ -257,7 +291,10 @@ function emptyStateLabel() {
 // Returns { html, exp } — exp is null when there is nothing to practise.
 function playAreaHTML(scaleName) {
   // Mirror the real layout's structure so toggling the last one off doesn't resize the page.
-  if (nothingSelected()) return { exp: null, html: `
+  if (nothingSelected())
+    return {
+      exp: null,
+      html: `
     <div class="scale-title">
       <div class="scale">&nbsp;</div>
       <div class="mode-label">${emptyStateLabel()}</div>
@@ -265,10 +302,12 @@ function playAreaHTML(scaleName) {
     </div>
     <div class="sequence"><span class="note placeholder"></span></div>
     <div class="heard"></div>
-  ` };
+  `,
+    };
   const exp = buildExpected(scaleName, transpositions[transposition] || 0, currentPattern);
-  const seq = exp.displayNames.map((name, i) =>
-    `<span class="note" data-slot="${i}" data-full="${name}"></span>`).join("");
+  const seq = exp.displayNames
+    .map((name, i) => `<span class="note" data-slot="${i}" data-full="${name}"></span>`)
+    .join("");
   // Always rendered, mic or not, so enabling the mic doesn't reflow the page.
   const heardHTML = `
     <div class="heard" id="heard">
@@ -284,7 +323,9 @@ function playAreaHTML(scaleName) {
       </svg>
     </div>
   `;
-  return { exp, html: `
+  return {
+    exp,
+    html: `
     <div class="scale-title">
       <div class="scale">${chordName(scaleName, currentNotation)}</div>
       <div class="mode-label">${displayMode(modeOf(scaleName))}</div>
@@ -292,17 +333,28 @@ function playAreaHTML(scaleName) {
     </div>
     <div class="sequence" id="sequence">${seq}</div>
     ${heardHTML}
-  ` };
+  `,
+  };
 }
 
 function renderStage() {
   const play = playAreaHTML(scales[index]);
-  const transposeButtons = Object.keys(transpositions).map(t =>
-    `<button class="${t === transposition ? "selected" : ""}" data-trans="${t}">${t}</button>`).join("");
-  const patternButtons = patternOptions.map(p =>
-    `<button class="${activePatterns.includes(p) ? "selected" : ""}" data-pattern="${p}">${patternLabels[p]}</button>`).join("");
-  const modeButtons = MODES.map(m =>
-    `<button class="${weights[m.id] > 0 ? "selected" : ""}" data-mode-toggle="${m.id}">${m.short}</button>`).join("");
+  const transposeButtons = Object.keys(transpositions)
+    .map(
+      t =>
+        `<button class="${t === transposition ? "selected" : ""}" data-trans="${t}">${t}</button>`,
+    )
+    .join("");
+  const patternButtons = patternOptions
+    .map(
+      p =>
+        `<button class="${activePatterns.includes(p) ? "selected" : ""}" data-pattern="${p}">${patternLabels[p]}</button>`,
+    )
+    .join("");
+  const modeButtons = MODES.map(
+    m =>
+      `<button class="${weights[m.id] > 0 ? "selected" : ""}" data-mode-toggle="${m.id}">${m.short}</button>`,
+  ).join("");
 
   const playing = state === "playing";
   app.innerHTML = `
@@ -351,20 +403,24 @@ function bindToggles(id, attr, flip) {
     btn.addEventListener("click", e => {
       e.currentTarget.classList.toggle("selected", flip(e.currentTarget.dataset[attr]));
       refreshPlayArea();
-    }));
+    }),
+  );
 }
 
 function attachReadyHandlers() {
   const transposeButtons = document.querySelectorAll("#transpose-radio button");
-  transposeButtons.forEach(btn => btn.addEventListener("click", e => {
-    transposition = e.currentTarget.dataset.trans;
-    transpositionStore.save(transposition);
-    transposeButtons.forEach(b => b.classList.toggle("selected", b === e.currentTarget));
-    refreshPlayArea();
-  }));
+  transposeButtons.forEach(btn =>
+    btn.addEventListener("click", e => {
+      transposition = e.currentTarget.dataset.trans;
+      transpositionStore.save(transposition);
+      transposeButtons.forEach(b => b.classList.toggle("selected", b === e.currentTarget));
+      refreshPlayArea();
+    }),
+  );
   bindToggles("pattern-radio", "pattern", p => {
     const i = activePatterns.indexOf(p);
-    if (i >= 0) activePatterns.splice(i, 1); else activePatterns.push(p);
+    if (i >= 0) activePatterns.splice(i, 1);
+    else activePatterns.push(p);
     patternsStore.save(activePatterns);
     repick();
     return activePatterns.includes(p);
@@ -389,7 +445,10 @@ function refreshPlayArea() {
 function setupMatcher(exp) {
   noteTracker?.reset();
   pendingStart.cancel();
-  if (!exp) { currentMatcher = null; return; }
+  if (!exp) {
+    currentMatcher = null;
+    return;
+  }
   currentMatcher = new Matcher(exp, {
     onProgress() {
       updateSequenceUI();
@@ -397,14 +456,17 @@ function setupMatcher(exp) {
       // One note could be noise, so wait for a sustain; a second correct note
       // is proof enough on its own.
       if (currentMatcher.matchIdx === 1) pendingStart.arm(exp.single.pcs[0]);
-      else { pendingStart.cancel(); beginPlaying(); }
+      else {
+        pendingStart.cancel();
+        beginPlaying();
+      }
     },
     onSuccess: onSequenceComplete,
   });
 }
 
 // Defined here so they close over updateSequenceUI / beginPlaying.
-pendingStart = holdTimer(HOLD_MS, (pc) => {
+pendingStart = holdTimer(HOLD_MS, pc => {
   if (noteTracker?.state === "playing" && noteTracker.currentPC === pc) beginPlaying();
 });
 pendingRewind = holdTimer(HOLD_MS, ({ pc, rewindTo, cents }) => {
@@ -425,7 +487,7 @@ function beginPlaying() {
   const now = performance.now();
   scaleStart = now;
   state = "playing";
-  updateWakeLock();   // this transition never goes through render()
+  updateWakeLock(); // this transition never goes through render()
   // Cross-fade the option layers out and the play layers in; nothing moves.
   document.querySelectorAll(".swap").forEach(swap => {
     swap.querySelectorAll(".layer").forEach(l => l.classList.toggle("faded"));
@@ -487,7 +549,7 @@ function completeCurrent() {
     times.push({
       scale: scales[index],
       ms: now - scaleStart,
-      pattern: currentPattern,   // randomised per scale, so times only compare within one
+      pattern: currentPattern, // randomised per scale, so times only compare within one
       cents: cList.length ? mean(cList.map(Math.abs)) : null,
     });
   } else {
@@ -503,10 +565,11 @@ function completeCurrent() {
   render();
 }
 
-
-
 function recordSession() {
-  if (times.length === 0) { lastSession = null; return; }   // all skipped — nothing to save
+  if (times.length === 0) {
+    lastSession = null;
+    return;
+  } // all skipped — nothing to save
   const total = times.reduce((s, t) => s + t.ms, 0);
   const cList = times.map(t => t.cents).filter(c => typeof c === "number");
   const avgCents = cList.length ? mean(cList) : null;
@@ -550,10 +613,11 @@ function renderResults() {
   const prev = h.length > 1 ? h[h.length - 2] : null;
   // Compare per-scale pace, not session totals — the scale count varies with
   // which modes are toggled on, so totals aren't comparable across sessions.
-  const best = h.reduce((b, s) => s.avg_ms < b.avg_ms ? s : b);
+  const best = h.reduce((b, s) => (s.avg_ms < b.avg_ms ? s : b));
   const isPB = cur.avg_ms === best.avg_ms && h.length > 1;
   const sorted = cur.times.slice().sort((a, b) => a.ms - b.ms);
-  const fastest = sorted[0], slowest = sorted[sorted.length - 1];
+  const fastest = sorted[0],
+    slowest = sorted[sorted.length - 1];
   let deltas = "";
   if (prev) {
     deltas = `<div class="deltas">
@@ -573,10 +637,12 @@ function renderResults() {
         ${cur.avg_cents !== null && cur.avg_cents !== undefined ? `<div><span>avg intonation</span><strong>±${cur.avg_cents}¢</strong>${prev?.avg_cents != null ? `<em>${cur.avg_cents < prev.avg_cents ? "▼" : cur.avg_cents > prev.avg_cents ? "▲" : "="} ${Math.abs(cur.avg_cents - prev.avg_cents).toFixed(1)}¢ vs prev</em>` : ""}</div>` : ""}
       </div>
       <div class="list">
-        ${cur.times.map(t => {
-          const c = t.ms === fastest.ms ? "fast" : t.ms === slowest.ms ? "slow" : "";
-          return `<div class="${c}"><span>${chordName(t.scale)}</span><span class="row-mode">${displayMode(modeOf(t.scale))}</span><span>${fmt(t.ms)}</span></div>`;
-        }).join("")}
+        ${cur.times
+          .map(t => {
+            const c = t.ms === fastest.ms ? "fast" : t.ms === slowest.ms ? "slow" : "";
+            return `<div class="${c}"><span>${chordName(t.scale)}</span><span class="row-mode">${displayMode(modeOf(t.scale))}</span><span>${fmt(t.ms)}</span></div>`;
+          })
+          .join("")}
       </div>
       <div class="hint">${restartHint()}</div>
     </div>
@@ -593,17 +659,16 @@ function advanceFromInput() {
   if (state === "done") return start();
 }
 
-document.addEventListener("keydown", (e) => {
+document.addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT") return;
-  if (e.metaKey || e.ctrlKey || e.altKey) return;   // leave browser shortcuts alone
+  if (e.metaKey || e.ctrlKey || e.altKey) return; // leave browser shortcuts alone
   if (INERT_KEYS.has(e.key)) return;
   e.preventDefault();
   if (e.code === "Escape") return start();
   advanceFromInput();
 });
 
-
-document.addEventListener("click", (e) => {
+document.addEventListener("click", e => {
   if (e.target.closest("button, a, input, select")) return;
   advanceFromInput();
 });
@@ -617,10 +682,17 @@ document.getElementById("mic-warn").addEventListener("click", () => initMic());
 // A backgrounded tab can suspend the context, so resume on any gesture.
 async function ensureAudio() {
   if (audioCtx) return resumeAudioIfNeeded();
-  if (await initMic() && state === "ready") render();
+  if ((await initMic()) && state === "ready") render();
 }
 ["pointerdown", "keydown"].forEach(evt =>
-  document.addEventListener(evt, () => { ensureAudio(); updateWakeLock(); }, { passive: true })
+  document.addEventListener(
+    evt,
+    () => {
+      ensureAudio();
+      updateWakeLock();
+    },
+    { passive: true },
+  ),
 );
 
 // Hiding the page releases the lock, so take it back on return.
@@ -628,7 +700,10 @@ document.addEventListener("visibilitychange", updateWakeLock);
 
 noteTracker = new NoteTracker(
   (pc, cents, midi) => currentMatcher?.input(pc, cents, midi),
-  () => { pendingStart.cancel(); pendingRewind.cancel(); },
+  () => {
+    pendingStart.cancel();
+    pendingRewind.cancel();
+  },
 );
 
 start();
