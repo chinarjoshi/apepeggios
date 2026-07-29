@@ -1,13 +1,14 @@
-// Regression tests for app.js.  Run: node test.mjs
+// Regression tests for core.js and app.js.  Run: node test.mjs
 //
-// Every assertion covers something that actually broke. The whole of app.js
-// runs in one vm against a stub DOM, so the suite survives reordering and
-// "the app boots" is itself covered.
+// Every assertion covers something that actually broke. Both files run in one
+// vm against a stub DOM, so the suite survives reordering and "the app boots"
+// is itself covered.
 
 import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
 
-const SRC = new URL("./app.js", import.meta.url);
+// In the order index.html loads them: app.js reads what core.js declared.
+const SRCS = ["./core.js", "./app.js"].map(f => new URL(f, import.meta.url));
 
 // ---------------------------------------------------------------- harness
 
@@ -67,7 +68,7 @@ function boot({ storage = {}, hover = true, width = 1440, clock = { t: 0 }, wake
   });
   ctx.globalThis = ctx;
 
-  const script = readFileSync(SRC, "utf8");
+  const script = SRCS.map(f => readFileSync(f, "utf8")).join("\n");
   runInContext(script + `
     ;globalThis.__api = {
       MODES, MODE, keySharpsMajor, MAX_ACCIDENTALS, NOTATIONS,
