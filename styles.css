@@ -100,7 +100,6 @@ body {
 /* Fixed width per field, so 9 -> 10 doesn't shift the centred row. */
 .stats strong { color: var(--fg); font-weight: 500; display: inline-block; text-align: right; }
 .stats .stat-count strong { min-width: var(--count-w, 2ch); }
-.stats .stat-time strong { min-width: 8ch; }
 /* Layers share one grid cell so swapping them never shifts the page. */
 .swap { display: grid; }
 .swap > .layer {

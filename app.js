@@ -329,9 +329,7 @@ function renderStage() {
         <div class="layer ${playing ? "" : "faded"}">
           <div class="stats" style="--count-w: ${String(scales.length).length}ch">
             <span class="stat-count"><strong>${index + 1}</strong> / ${scales.length}</span>
-            <span class="stat-time" id="timer"><strong>0.00s</strong> / scale</span>
           </div>
-          <div class="hint">${audioCtx ? "auto-advances on correct play · " : ""}${isTouch() ? "<strong>tap</strong> skips" : "<strong>click</strong> or <strong>key</strong> skips · <strong>esc</strong> restarts"}</div>
         </div>
       </div>
     </div>
@@ -340,7 +338,6 @@ function renderStage() {
   setupMatcher(play.exp);
   updateSequenceUI();
   attachReadyHandlers();
-  if (playing) tickTimer();
 }
 
 function repick() {
@@ -433,7 +430,6 @@ function beginPlaying() {
   document.querySelectorAll(".swap").forEach(swap => {
     swap.querySelectorAll(".layer").forEach(l => l.classList.toggle("faded"));
   });
-  tickTimer();
 }
 
 function updateSequenceUI() {
@@ -507,16 +503,6 @@ function completeCurrent() {
   render();
 }
 
-let timerGen = 0;
-function tickTimer() {
-  const gen = ++timerGen;   // supersede any loop from a previous scale
-  (function step() {
-    if (gen !== timerGen || state !== "playing") return;
-    const el = document.getElementById("timer");
-    if (el) el.innerHTML = `<strong>${fmt(performance.now() - scaleStart)}</strong> / scale`;
-    requestAnimationFrame(step);
-  })();
-}
 
 
 function recordSession() {
