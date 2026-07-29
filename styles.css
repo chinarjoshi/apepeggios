@@ -55,7 +55,9 @@
 .brand .wordmark { margin-left: -0.4rem; }
 .brand .ape { color: var(--accent); }
 .brand .peggios { color: var(--muted); }
-html, body { height: 100%; }
+/* Locked: a stray drag would scroll or rubber-band instead of tapping.
+   `dvh` so a collapsing address bar doesn't leave the layout short. */
+html, body { height: 100dvh; overflow: hidden; overscroll-behavior: none; }
 body {
   background: var(--bg);
   color: var(--fg);
@@ -64,7 +66,12 @@ body {
   align-items: center;
   justify-content: center;
   padding: 2rem;
+  /* Drops the double-tap-to-zoom delay; pinch zoom still works. */
+  touch-action: manipulation;
 }
+/* Results is the one view that runs long, so only it scrolls. */
+#app { max-height: 100%; }
+#app:has(.results) { overflow-y: auto; overscroll-behavior: contain; }
 .stage { display: flex; flex-direction: column; align-items: center; gap: 2rem; text-align: center; max-width: 100%; }
 .play-area { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; margin-top: 1.5rem; }
 .scale {
@@ -308,7 +315,7 @@ body {
 
 /* Narrow screens: let the 8 note pills shrink to share one row. */
 @media (max-width: 620px) {
-  body { padding: 1rem 0.5rem; align-items: stretch; overflow-y: auto; }
+  body { padding: 1rem 0.5rem; align-items: stretch; }
   /* Shrink-to-fit by default, so the sequence's width:100% would resolve
      against its own content. Stretch the chain. */
   #app, .stage, .play-area { width: 100%; }
@@ -324,6 +331,7 @@ body {
   /* Equal 1fr rows put the cluster dead centre, options in the lower half. */
   .stage {
     flex: 1;
+    min-height: 0;   /* shrink to the locked viewport instead of overflowing it */
     display: grid;
     grid-template-rows: 1fr auto 1fr;
     justify-items: center;
