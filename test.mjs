@@ -31,7 +31,7 @@ function ok(cond, what) { if (!cond) throw new Error(what); }
 
 // ------------------------------------------------------------- stub DOM
 
-function boot({ storage = {}, hover = true, width = 1440, clock = { t: 0 } } = {}) {
+function boot({ storage = {}, hover = true, width = 1440, clock = { t: 0 }, wakeLock } = {}) {
   const node = () => ({
     classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
     dataset: {}, style: {}, textContent: "", innerHTML: "",
@@ -51,7 +51,10 @@ function boot({ storage = {}, hover = true, width = 1440, clock = { t: 0 } } = {
       setItem: (k, v) => { storage[k] = v; },
     },
     location: { hostname: "localhost", search: "" },
-    navigator: { mediaDevices: { getUserMedia: () => Promise.reject(new Error("no mic in tests")) } },
+    navigator: {
+      mediaDevices: { getUserMedia: () => Promise.reject(new Error("no mic in tests")) },
+      ...(wakeLock ? { wakeLock } : {}),
+    },
     document: {
       documentElement: { style: { setProperty() {} }, clientWidth: width },
       getElementById: () => node(),
@@ -371,6 +374,35 @@ await checkAsync("runs that cannot have been played are not recorded", async () 
   b.completeCurrent();
   eq(b.times.length, 0, "a manual advance was counted as a result");
 });
+// --------------------------------------------------------------- wake lock
+
+// The phone dims mid-run because nobody touches the screen while playing. The
+// lock must span the whole run and no more: taken once at the downbeat (a
+// second request leaks a lock nothing will ever release) and dropped at the end.
+await checkAsync("the screen lock spans the run and nothing else", async () => {
+  const log = [];
+  const settle = () => new Promise(r => setTimeout(r, 20));
+  const wakeLock = { request: async () => {
+    log.push("acquire");
+    return { release: async () => { log.push("release"); }, addEventListener() {} };
+  } };
+
+  const a = boot({ wakeLock });
+  await settle();
+  eq(log.join(","), "", "a lock was taken on the options screen");
+
+  const pcs = a.matcher.expected.single.pcs;
+  a.matcher.input(pcs[0], 0);
+  a.matcher.input(pcs[1], 0);   // the second correct note starts the run
+  await settle();
+  eq(a.state, "playing", "the run did not start");
+  eq(log.join(","), "acquire", "no lock was held for the run");
+
+  // Auto-advance re-renders on every scale; none of those may re-request.
+  while (a.state !== "done") { a.completeCurrent(); await settle(); }
+  eq(log.join(","), "acquire,release", "lock not held exactly once across the run");
+});
+
 // ---------------------------------------------------------------- report
 
 for (const f of failures) console.error(`FAIL  ${f}`);

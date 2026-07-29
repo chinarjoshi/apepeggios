@@ -718,7 +718,30 @@ function start() {
   render();
 }
 
+// A run means not touching the screen for minutes at a time, so the phone dims
+// mid-scale. Only held while one is under way: on the options and results
+// screens you are looking at the thing and can touch it.
+// One chain, so overlapping calls can't double-request or release out of order.
+let wakeLock = null;
+let wakeQueue = Promise.resolve();
+function updateWakeLock() {
+  if (!navigator.wakeLock) return;
+  wakeQueue = wakeQueue.then(async () => {
+    const want = state === "playing" && document.visibilityState !== "hidden";
+    if (want === !!wakeLock) return;
+    if (want) {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => { wakeLock = null; });
+    } else {
+      const held = wakeLock;
+      wakeLock = null;
+      await held.release();
+    }
+  }).catch(() => { wakeLock = null; });   // refused, or released underneath us
+}
+
 function render() {
+  updateWakeLock();
   if (state === "done") return renderResults();
   renderStage();   // handles both "ready" and "playing"
 }
@@ -906,6 +929,7 @@ function beginPlaying() {
   const now = performance.now();
   scaleStart = now;
   state = "playing";
+  updateWakeLock();   // this transition never goes through render()
   // Cross-fade the option layers out and the play layers in; nothing moves.
   document.querySelectorAll(".swap").forEach(swap => {
     swap.querySelectorAll(".layer").forEach(l => l.classList.toggle("faded"));
@@ -1111,8 +1135,11 @@ async function ensureAudio() {
   if (await initMic() && state === "ready") render();
 }
 ["pointerdown", "keydown"].forEach(evt =>
-  document.addEventListener(evt, ensureAudio, { passive: true })
+  document.addEventListener(evt, () => { ensureAudio(); updateWakeLock(); }, { passive: true })
 );
+
+// Hiding the page releases the lock, so take it back on return.
+document.addEventListener("visibilitychange", updateWakeLock);
 
 noteTracker = new NoteTracker(
   (pc, cents, midi) => currentMatcher?.input(pc, cents, midi),
