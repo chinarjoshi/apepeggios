@@ -1,13 +1,13 @@
-// Regression tests for index.html.  Run: node test.mjs
+// Regression tests for app.js.  Run: node test.mjs
 //
-// Every assertion covers something that actually broke. The whole <script>
+// Every assertion covers something that actually broke. The whole of app.js
 // runs in one vm against a stub DOM, so the suite survives reordering and
 // "the app boots" is itself covered.
 
 import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
 
-const SRC = new URL("./index.html", import.meta.url);
+const SRC = new URL("./app.js", import.meta.url);
 
 // ---------------------------------------------------------------- harness
 
@@ -64,8 +64,7 @@ function boot({ storage = {}, hover = true, width = 1440, clock = { t: 0 } } = {
   });
   ctx.globalThis = ctx;
 
-  const html = readFileSync(SRC, "utf8");
-  const script = html.split("<script>")[1].split("</script>")[0];
+  const script = readFileSync(SRC, "utf8");
   runInContext(script + `
     ;globalThis.__api = {
       MODES, MODE, keySharpsMajor, MAX_ACCIDENTALS, NOTATIONS,
