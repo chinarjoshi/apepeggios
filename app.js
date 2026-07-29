@@ -231,12 +231,17 @@ function arp1Seg(ctx) {
   const t = i => tone(ctx, i);
   return segment(ctx, "arp", [t(1), t(2), t(3), t(2), t(1), t(0)]);
 }
+// Triads up, the 7th saved for the top octave, then triads back down — the
+// one-octave shape stretched over two. C major: C E G C E G B G E C G E C.
 function arp2Seg(ctx) {
-  const up = o => [tone(ctx, 1, o), tone(ctx, 2, o), tone(ctx, 3, o)];
-  const dn = o => [tone(ctx, 3, o), tone(ctx, 2, o), tone(ctx, 1, o)];
-  const oct = o => ({ pc: ctx.arp[0], slot: ctx.octaveSlot, step: 12 + 12 * o });
-  return segment(ctx, "arp",
-    [...up(0), oct(0), ...up(1), oct(1), ...dn(1), oct(0), ...dn(0), tone(ctx, 0)]);
+  // The root an octave up lights the top pill, not the one it started on.
+  const t = (i, o) => (i === 0 && o
+    ? { pc: ctx.arp[0], slot: ctx.octaveSlot, step: 12 * o }
+    : tone(ctx, i, o));
+  const up = o => [t(0, o), t(1, o), t(2, o)];
+  const dn = o => [t(2, o), t(1, o), t(0, o)];
+  // The leading root is struck by the scale descent already; compose drops it.
+  return segment(ctx, "arp", [...up(0), ...up(1), tone(ctx, 3, 1), ...dn(1), ...dn(0)]);
 }
 
 // Resolve a scale degree to a note, allowing it to run past either end of

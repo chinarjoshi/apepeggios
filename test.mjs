@@ -164,7 +164,7 @@ check("runs ascend and descend exactly", () => {
 });
 
 check("single and double paths diverge only at the branch", () => {
-  for (const [pat, single, double] of [["scale",21,45], ["thirds",29,null], ["in3s",43,null]]) {
+  for (const [pat, single, double] of [["scale",21,41], ["thirds",29,null], ["in3s",43,null]]) {
     const e = api.buildExpected("C Major", 0, pat), b = e.branchIdx;
     eq(e.single.pcs.length, single, `${pat} single length`);
     // Steps carry the register the pitch classes throw away: they must agree
@@ -196,9 +196,28 @@ check("single and double paths diverge only at the branch", () => {
       `${pat} double step ${e.double.steps[i]} at ${i} is not the pitch played`));
     leapOk(e.double);
     eq(top(e.double) - top(e.single), 12, `${pat} two-octave ascent tops out wrong`);
+    // Peaks on the top chord tone an octave up. The root above it is skipped,
+    // so this sits below the scale ascent's top rather than reaching it.
     const arp = e.double.steps.filter((_, i) => e.double.phases[i] === "arp");
-    if (arp.length) eq(Math.max(...arp), top(e.double), `${pat} two-octave arpeggio stops short`);
+    const chord = api.MODE.Major.arp;
+    if (arp.length) eq(Math.max(...arp), chord[chord.length - 1] + 12,
+                       `${pat} two-octave arpeggio does not peak on the 7th above`);
   }
+});
+
+// Triads up, the 7th only at the very top, no root above it — the one-octave
+// shape stretched over two, rather than a doubled one-octave run.
+check("the two-octave arpeggio saves the 7th for the top", () => {
+  const e = api.buildExpected("C Major", 0, "scale");
+  const at = e.double.phases.indexOf("arp");
+  eq(e.double.steps[at - 1], 0, "the arpeggio should pick up from the scale's root");
+  eq(e.double.steps.slice(at), [4, 7, 12, 16, 19, 23, 19, 16, 12, 7, 4, 0],
+     "C · E G C · E G B · G E C · G E C");
+  // Both octave roots light the top pill; only the final one lights the first.
+  eq(e.double.slots.slice(at), [2, 4, 7, 2, 4, 6, 4, 2, 7, 4, 2, 0], "pills lit");
+  // The same shape one octave down, so the two read as one exercise.
+  const s = e.single.phases.indexOf("arp");
+  eq(e.single.steps.slice(s - 1), [0, 4, 7, 11, 7, 4, 0], "one-octave shape");
 });
 
 check("transposition moves the pitches, not the written names", () => {
