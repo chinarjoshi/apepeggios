@@ -243,10 +243,7 @@ function start() {
   render();
 }
 
-// A run means not touching the screen for minutes at a time, so the phone dims
-// mid-scale. Only held while one is under way: on the options and results
-// screens you are looking at the thing and can touch it.
-// One chain, so overlapping calls can't double-request or release out of order.
+// Only while a run is under way; one chain so overlapping calls cannot double-request.
 let wakeLock = null;
 let wakeQueue = Promise.resolve();
 function updateWakeLock() {

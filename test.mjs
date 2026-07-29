@@ -278,8 +278,7 @@ check("single and double paths diverge only at the branch", () => {
     );
     leapOk(e.double);
     eq(top(e.double) - top(e.single), 12, `${pat} two-octave ascent tops out wrong`);
-    // Peaks on the top chord tone an octave up. The root above it is skipped,
-    // so this sits below the scale ascent's top rather than reaching it.
+    // Peaks on the top chord tone an octave up, below the scale ascent's top.
     const arp = e.double.steps.filter((_, i) => e.double.phases[i] === "arp");
     const chord = api.MODE.Major.arp;
     if (arp.length)
@@ -291,8 +290,7 @@ check("single and double paths diverge only at the branch", () => {
   }
 });
 
-// Triads up, the 7th only at the very top, no root above it — the one-octave
-// shape stretched over two, rather than a doubled one-octave run.
+// Triads up, the 7th only at the very top — not a one-octave run played twice.
 check("the two-octave arpeggio saves the 7th for the top", () => {
   const e = api.buildExpected("C Major", 0, "scale");
   const at = e.double.phases.indexOf("arp");
@@ -497,9 +495,7 @@ await checkAsync("runs that cannot have been played are not recorded", async () 
 });
 // --------------------------------------------------------------- wake lock
 
-// The phone dims mid-run because nobody touches the screen while playing. The
-// lock must span the whole run and no more: taken once at the downbeat (a
-// second request leaks a lock nothing will ever release) and dropped at the end.
+// Must span the run and no more; a second request leaks a lock nothing releases.
 await checkAsync("the screen lock spans the run and nothing else", async () => {
   const log = [];
   const settle = () => new Promise(r => setTimeout(r, 20));

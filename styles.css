@@ -77,8 +77,7 @@
 .brand .peggios {
   color: var(--muted);
 }
-/* Locked: a stray drag would scroll or rubber-band instead of tapping.
-   `dvh` so a collapsing address bar doesn't leave the layout short. */
+/* Locked: a stray drag would scroll instead of tapping. dvh tracks the address bar. */
 html,
 body {
   height: 100dvh;
@@ -111,8 +110,7 @@ body {
   text-align: center;
   max-width: 100%;
 }
-/* margin-bottom, not a stage gap: on mobile it grows the auto row, so the fr
-   spacers take the space from above and the options stay put. */
+/* Not a stage gap: this grows the mobile auto row, so the space comes from above. */
 .play-area {
   display: flex;
   flex-direction: column;
@@ -557,8 +555,7 @@ body {
 
 /* Narrow screens: let the 8 note pills shrink to share one row. */
 @media (max-width: 620px) {
-  /* Top-light, bottom-heavy: shifts the content box up without changing its
-     height, so the title and options rise together and the gap holds. */
+  /* Top-light, bottom-heavy: shifts the content box up without resizing it. */
   body {
     padding: 0.25rem 0.5rem 1.75rem;
     align-items: stretch;
@@ -579,9 +576,7 @@ body {
     justify-content: safe center;
     align-items: center;
   }
-  /* Top spacer heavier than the bottom, so the title sits below centre instead
-     of pinned to it. Both are fr, so a short screen takes the space back from
-     the top rather than pushing the options off the bottom. */
+  /* Heavier top spacer drops the title below centre; fr, so short screens reclaim it. */
   .stage {
     flex: 1;
     min-height: 0; /* shrink to the locked viewport instead of overflowing it */
@@ -593,8 +588,7 @@ body {
     grid-row: 2;
     align-self: center;
   }
-  /* Centred in the lower band, so its slack splits above and below rather than
-     jamming the options against the tuner. */
+  /* Centred, so its slack splits above and below the options. */
   .widgets-bottom {
     grid-row: 3;
     align-self: center;

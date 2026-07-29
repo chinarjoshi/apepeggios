@@ -1,6 +1,5 @@
 #!/bin/sh
-# Formats staged files and re-stages them. Enabled by `npm install`, which
-# points core.hooksPath here.
+# Formats staged files and re-stages them. npm install points core.hooksPath here.
 set -e
 
 bin=node_modules/.bin/prettier
@@ -16,8 +15,7 @@ for f in $staged; do
   if printf '%s\n' "$dirty" | grep -qxF "$f"; then partial="$partial $f"; else clean="$clean $f"; fi
 done
 
-# Re-staging a partially staged file would sweep in the unstaged edits too, so
-# check what is actually staged and leave the working tree alone.
+# Only the staged blob is checked: re-staging would sweep in unstaged edits.
 status=0
 for f in $partial; do
   staged_blob=$(mktemp); formatted=$(mktemp)
@@ -32,8 +30,6 @@ done
 [ "$status" -eq 0 ] || { echo "Run 'npm run fmt', then re-stage."; exit 1; }
 
 if [ -n "$clean" ]; then
-  # shellcheck disable=SC2086
   "$bin" --write --log-level warn $clean
-  # shellcheck disable=SC2086
   git add $clean
 fi

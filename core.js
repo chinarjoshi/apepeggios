@@ -1,7 +1,4 @@
-// The half that never touches the DOM: theory, sequence building, pitch
-// detection, and matching. Loaded before app.js, which owns the audio graph,
-// rendering and events — and which supplies the pendingRewind that Matcher
-// reaches for at match time.
+// The DOM-free half. Loaded before app.js, which supplies pendingRewind.
 // ===== Music theory =====
 const MAX_ACCIDENTALS = 7; // key signatures beyond ±7 sharps/flats are unplayable
 const SEMITONES = 12;
@@ -259,15 +256,14 @@ function arp1Seg(ctx) {
   const t = i => tone(ctx, i);
   return segment(ctx, "arp", [t(1), t(2), t(3), t(2), t(1), t(0)]);
 }
-// Triads up, the 7th saved for the top octave, then triads back down — the
-// one-octave shape stretched over two. C major: C E G C E G B G E C G E C.
+// Triads up, the 7th only at the top. C major: C E G C E G B G E C G E C.
 function arp2Seg(ctx) {
   // The root an octave up lights the top pill, not the one it started on.
   const t = (i, o) =>
     i === 0 && o ? { pc: ctx.arp[0], slot: ctx.octaveSlot, step: 12 * o } : tone(ctx, i, o);
   const up = o => [t(0, o), t(1, o), t(2, o)];
   const dn = o => [t(2, o), t(1, o), t(0, o)];
-  // The leading root is struck by the scale descent already; compose drops it.
+  // The scale descent already struck the leading root; compose drops it.
   return segment(ctx, "arp", [...up(0), ...up(1), tone(ctx, 3, 1), ...dn(1), ...dn(0)]);
 }
 
